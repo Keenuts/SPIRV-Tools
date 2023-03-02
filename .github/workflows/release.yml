@@ -23,9 +23,15 @@ jobs:
           git add VERSION
           git commit -m "prepare release ${{ github.ref_name }}"
           git push --force origin refs/heads/${{ github.ref_name }}
-          gh pr create --base main --head refs/heads/${{ github.ref_name }} -t "Prepare release ${{ github.ref_name }}" -b "Adds VERSION" -r Keenuts
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Get changelog for version
+        run: |
+          echo "change\nchange2" >> $GITHUB_OUTPUT
+        id: changelog
+      - name: Create release
+        run: |
+          gh release create -d -n "${{ steps.changelog.outputs }}" --target refs/heads/${{ github.ref_name }}
 
 #update-dependencies:
 #  name: Update dependencies
