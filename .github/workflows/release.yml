@@ -15,7 +15,7 @@ jobs:
         run: |
           git config user.name "GitHub Actions[bot]"
           git config user.email "<>"
-          git checkout -b refs/heads/${{ github.ref_name }}
+          git checkout -b ${{ github.ref_name }}
       - name: Create VERSION file.
         run: 'echo ${{ github.ref_name }} > VERSION'
       - name: Create release PR
