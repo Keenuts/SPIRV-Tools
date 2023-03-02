@@ -20,7 +20,7 @@ jobs:
         run: 'echo "{ \"version\": \"${{ github.ref_name }}\", \"hash\": \"${{ github.sha }}\" }" > VERSION'
       - name: Prepare CHANGELOG for version
         run: |
-          echo "change\nchange2" > VERSION_CHANGELOG
+          python utils/generate_changelog.py CHANGES ${{ github.ref_name }} VERSION_CHANGELOG
       - name: Create release PR
         run: |
           git add VERSION
