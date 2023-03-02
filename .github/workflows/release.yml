@@ -31,6 +31,8 @@ jobs:
       - name: Create release
         run: |
           gh release create -d -F VERSION_CHANGELOG --target refs/heads/${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
 #update-dependencies:
 #  name: Update dependencies
