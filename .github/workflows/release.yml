@@ -1,0 +1,12 @@
+name: Create a release branch from release tag
+
+on:
+  tags:
+    - v[0-9][0-9][0-9][9-0].[0-9]+
+    - !v[0-9][0-9][0-9][9-0].[0-9]+.rc*
+
+jobs:
+  release-job:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo abc
