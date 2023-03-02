@@ -22,7 +22,7 @@ jobs:
         run: |
           git add VERSION
           git commit -m "prepare release ${{ github.ref_name }}"
-          git push --force --set-upstream origin ref/heads/${{ github.ref_name }}
+          git push --force origin refs/remotes/origin/${{ github.ref_name }}
           gh pr create --base main -f -r Keenuts
         env:
           GITHUB_TOKEN: ${{ github.token }}
