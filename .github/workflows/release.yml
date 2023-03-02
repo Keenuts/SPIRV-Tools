@@ -15,14 +15,14 @@ jobs:
         run: |
           git config user.name "GitHub Actions[bot]"
           git config user.email "<>"
-          git checkout -b "${{ github.ref_name }}"
+          git checkout -b refs/heads/${{ github.ref_name }}
       - name: Create VERSION file.
         run: 'echo ${{ github.ref_name }} > VERSION'
       - name: Create release PR
         run: |
           git add VERSION
           git commit -m "prepare release ${{ github.ref_name }}"
-          git push --force --set-upstream origin "${{ github.ref_name }}"
+          git push --force --set-upstream origin ref/heads/${{ github.ref_name }}
           gh pr create --base main -f -r Keenuts
         env:
           GITHUB_TOKEN: ${{ github.token }}
