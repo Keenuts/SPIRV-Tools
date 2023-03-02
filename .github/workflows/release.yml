@@ -20,7 +20,7 @@ jobs:
         run: 'echo ${{ github.ref_name }} > VERSION'
       - name: Create release PR
         run: |
-          git add -u
+          git add VERSION
           git commit -m "prepare release ${{ github.ref_name }}"
           git push --force --set-upstream origin "${{ github.ref_name }}"
           gh pr create --base main -f -r Keenuts
