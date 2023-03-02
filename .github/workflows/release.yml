@@ -17,7 +17,7 @@ jobs:
           git config user.email "<>"
           git checkout -b ${{ github.ref_name }}
       - name: Create VERSION file.
-        run: '{ "version": "${{ github.ref_name }}", "hash": "{{ github.sha }}" } > VERSION'
+        run: 'echo "{ \"version\": \"${{ github.ref_name }}\", \"hash\": \"${{ github.sha }}\" } > VERSION'
       - name: Prepare CHANGELOG for version
         run: |
           echo "change\nchange2" > VERSION_CHANGELOG
