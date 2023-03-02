@@ -10,10 +10,9 @@ jobs:
   prepare-release-job:
     runs-on: ubuntu-latest
     steps:
-      - name: "Create version file"
-        run: echo ${{ github.ref_name }}
-        run: echo ${{ github.ref }}
-        run: echo ${{ github.ref_type }}
+      - run: echo ${{ github.ref_name }}
+      - run: echo ${{ github.ref }}
+      - run: echo ${{ github.ref_type }}
 
 #update-dependencies:
 #  name: Update dependencies
