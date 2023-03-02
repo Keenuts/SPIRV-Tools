@@ -10,9 +10,21 @@ jobs:
   prepare-release-job:
     runs-on: ubuntu-latest
     steps:
-      - run: echo ${{ github.ref_name }}
-      - run: echo ${{ github.ref }}
-      - run: echo ${{ github.ref_type }}
+      - name: Setup git user information
+        run: |
+          git config user.name "GitHub Actions[bot]"
+          git config user.email "<>"
+          git checkout -b "${{ github.ref_name }}"
+      - name: Create VERSION file.
+        run: 'echo ${{ github.ref_name }} > VERSION'
+      - name: Create release PR
+        run: |
+          git add -u
+          git commit -m "prepare release ${{ github.ref_name }}"
+          git push --force --set-upstream origin "${{ github.ref_name }}"
+          gh pr create --base main -f -r Keenuts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
 #update-dependencies:
 #  name: Update dependencies
@@ -31,11 +43,6 @@ jobs:
 #    - name: Download dependencies
 #      run: python3 utils/git-sync-deps
 
-#    - name: Setup git user information
-#      run: |
-#        git config user.name "GitHub Actions[bot]"
-#        git config user.email "<>"
-#        git checkout -b roll_deps
 
 #    - name: Update dependencies
 #      run: |
