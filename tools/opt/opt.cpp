@@ -488,6 +488,9 @@ Options (in lexicographical order):)",
   --strip-debug
                Remove all debug instructions.)");
   printf(R"(
+  --strip-headers
+               Remove all merge headers (conditions and loops) from the module.)");
+  printf(R"(
   --strip-nonsemantic
                Remove all reflection and nonsemantic information.)");
   printf(R"(

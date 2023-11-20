@@ -249,6 +249,8 @@ Optimizer::PassToken CreateNullPass();
 // Section 3.42.2 of the SPIR-V spec) of the SPIR-V module to be optimized.
 Optimizer::PassToken CreateStripDebugInfoPass();
 
+Optimizer::PassToken CreateStripHeadersPass();
+
 // [Deprecated] This will create a strip-nonsemantic-info pass.  See below.
 Optimizer::PassToken CreateStripReflectInfoPass();
 
