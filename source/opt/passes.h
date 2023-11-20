@@ -84,6 +84,7 @@
 #include "source/opt/strip_debug_info_pass.h"
 #include "source/opt/strip_nonsemantic_info_pass.h"
 #include "source/opt/strip_headers_pass.h"
+#include "source/opt/structurize_pass.h"
 #include "source/opt/switch_descriptorset_pass.h"
 #include "source/opt/trim_capabilities_pass.h"
 #include "source/opt/unify_const_pass.h"

@@ -149,6 +149,7 @@ TEST(Optimizer, CanRegisterPassesFromFlags) {
       "--strip-debug",
       "--strip-headers",
       "--strip-nonsemantic",
+      "--structurize",
       "--set-spec-const-default-value=23:42 21:12",
       "--if-conversion",
       "--freeze-spec-const",

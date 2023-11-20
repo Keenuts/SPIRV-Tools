@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Google Inc.
+// Copyright (c) 2018 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,34 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SOURCE_OPT_STRIP_HEADERS_PASS_H_
-#define SOURCE_OPT_STRIP_HEADERS_PASS_H_
+#include "source/opt/structurize_pass.h"
 
-#include <algorithm>
-#include <array>
-#include <functional>
-#include <optional>
-#include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
-#include "source/enum_set.h"
-#include "source/extensions.h"
+#include "source/opt/instruction.h"
 #include "source/opt/ir_context.h"
-#include "source/opt/module.h"
-#include "source/opt/pass.h"
-#include "source/spirv_target_env.h"
+#include "source/util/string_utils.h"
 
 namespace spvtools {
 namespace opt {
 
-// See optimizer.hpp for documentation.
-class StripHeadersPass : public Pass {
- public:
-  const char* name() const override { return "strip-headers"; }
-  Status Process() override;
-};
+Pass::Status StructurizePass::Process() {
+  bool modified = false;
+  return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
+}
 
 }  // namespace opt
 }  // namespace spvtools
 
-#endif  // SOURCE_OPT_STRIP_HEADERS_PASS_H_

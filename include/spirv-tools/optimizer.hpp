@@ -251,6 +251,8 @@ Optimizer::PassToken CreateStripDebugInfoPass();
 
 Optimizer::PassToken CreateStripHeadersPass();
 
+Optimizer::PassToken CreateStructurizePass();
+
 // [Deprecated] This will create a strip-nonsemantic-info pass.  See below.
 Optimizer::PassToken CreateStripReflectInfoPass();
 

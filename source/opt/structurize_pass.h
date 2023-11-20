@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SOURCE_OPT_STRIP_HEADERS_PASS_H_
-#define SOURCE_OPT_STRIP_HEADERS_PASS_H_
+#ifndef SOURCE_OPT_STRUCTURIZE_PASS_H_
+#define SOURCE_OPT_STRUCTURIZE_PASS_H_
 
 #include <algorithm>
 #include <array>
@@ -33,9 +33,9 @@ namespace spvtools {
 namespace opt {
 
 // See optimizer.hpp for documentation.
-class StripHeadersPass : public Pass {
+class StructurizePass : public Pass {
  public:
-  const char* name() const override { return "strip-headers"; }
+  const char* name() const override { return "structurize"; }
   Status Process() override;
 };
 

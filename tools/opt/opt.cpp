@@ -499,6 +499,9 @@ Options (in lexicographical order):)",
                covers reflection information defined by
                SPV_GOOGLE_hlsl_functionality1 and SPV_KHR_non_semantic_info)");
   printf(R"(
+  --structurize
+               Converts a SPIR-V CFG into a structured CFG by adding merge instructions.)");
+  printf(R"(
   --switch-descriptorset=<from>:<to>
                Switch any DescriptoSet decorations using the value <from> to
                the new value <to>.)");

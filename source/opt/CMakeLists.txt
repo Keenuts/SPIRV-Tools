@@ -123,6 +123,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   strip_nonsemantic_info_pass.h
   strip_headers_pass.h
   struct_cfg_analysis.h
+  structurize_pass.h
   switch_descriptorset_pass.h
   tree_iterator.h
   trim_capabilities_pass.h
@@ -242,6 +243,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   strip_nonsemantic_info_pass.cpp
   strip_headers_pass.cpp
   struct_cfg_analysis.cpp
+  structurize_pass.cpp
   switch_descriptorset_pass.cpp
   trim_capabilities_pass.cpp
   type_manager.cpp

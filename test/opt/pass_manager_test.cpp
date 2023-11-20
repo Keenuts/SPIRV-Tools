@@ -83,6 +83,15 @@ TEST(PassManager, InterfaceHeaders) {
   EXPECT_STREQ("strip-headers", manager.GetPass(0)->name());
 }
 
+TEST(PassManager, InterfaceStructurize) {
+  PassManager manager;
+  EXPECT_EQ(0u, manager.NumPasses());
+
+  manager.AddPass<StructurizePass>();
+  EXPECT_EQ(1u, manager.NumPasses());
+  EXPECT_STREQ("structurize", manager.GetPass(0)->name());
+}
+
 // A pass that appends an OpNop instruction to the debug1 section.
 class AppendOpNopPass : public Pass {
  public:
