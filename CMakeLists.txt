@@ -82,6 +82,8 @@ else()
   message(FATAL_ERROR "Your platform '${CMAKE_SYSTEM_NAME}' is not supported!")
 endif()
 
+set(CMAKE_COLOR_DIAGNOSTICS ON)
+
 if (${SPIRV_TIMER_ENABLED})
   add_definitions(-DSPIRV_TIMER_ENABLED)
 endif()

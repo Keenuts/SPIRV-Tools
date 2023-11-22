@@ -112,6 +112,9 @@ void BasicBlock::ForEachSuccessorLabel(
 
 bool BasicBlock::WhileEachSuccessorLabel(
     const std::function<bool(const uint32_t)>& f) const {
+  if (insts_.empty())
+    return true;
+
   const auto br = &insts_.back();
   switch (br->opcode()) {
     case spv::Op::OpBranch:
@@ -132,6 +135,8 @@ bool BasicBlock::WhileEachSuccessorLabel(
 
 void BasicBlock::ForEachSuccessorLabel(
     const std::function<void(uint32_t*)>& f) {
+  if (insts_.empty())
+    return;
   auto br = &insts_.back();
   switch (br->opcode()) {
     case spv::Op::OpBranch: {

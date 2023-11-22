@@ -30,10 +30,20 @@ class CFG {
  public:
   explicit CFG(Module* module);
 
+  std::vector<const BasicBlock*> preds(const BasicBlock* b) const {
+    std::vector<const BasicBlock*> output;
+    for (uint32_t id : label2preds_.at(b->id())) {
+      output.push_back(block(id));
+    }
+    return output;
+  }
+
   // Return the list of predecessors for basic block with label |blkid|.
   // TODO(dnovillo): Move this to BasicBlock.
   const std::vector<uint32_t>& preds(uint32_t blk_id) const {
-    assert(label2preds_.count(blk_id));
+    static std::vector<uint32_t> empty(0);
+    if (label2preds_.count(blk_id) == 0)
+      return empty;
     return label2preds_.at(blk_id);
   }
 
@@ -52,6 +62,16 @@ class CFG {
   bool IsPseudoEntryBlock(BasicBlock* block_ptr) const {
     return block_ptr == &pseudo_entry_block_;
   }
+
+  //std::vector<const BasicBlock*> GetEntrypoints() const {
+  //  std::vector<const BasicBlock*> output;
+  //  for (const auto& [id, predecessors] : label2preds_) {
+  //    if (predecessors.size() != 0)
+  //      continue;
+  //    else
+  //      output.push_back(block(id));
+  //  }
+  //}
 
   // Return true if |block_ptr| is the pseudo-exit block.
   bool IsPseudoExitBlock(BasicBlock* block_ptr) const {

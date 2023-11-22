@@ -128,7 +128,7 @@ class BasicBlock {
   }
 
   // Returns true if the basic block has at least one successor.
-  inline bool hasSuccessor() const { return ctail()->IsBranch(); }
+  inline bool hasSuccessor() const { return !insts_.empty() && ctail()->IsBranch(); }
 
   // Runs the given function |f| on each instruction in this basic block, and
   // optionally on the debug line instructions that might precede them.
