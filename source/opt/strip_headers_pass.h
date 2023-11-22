@@ -37,6 +37,12 @@ class StripHeadersPass : public Pass {
  public:
   const char* name() const override { return "strip-headers"; }
   Status Process() override;
+
+private:
+  Pass::Status StripInstructions();
+  uint32_t GetFalseId();
+  Pass::Status PatchConditions(uint32_t conditionId);
+  Pass::Status PatchSwitch(uint32_t valueId);
 };
 
 }  // namespace opt
