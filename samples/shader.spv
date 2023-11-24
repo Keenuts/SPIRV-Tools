@@ -1,0 +1,82 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Google spiregg; 0
+; Bound: 27
+; Schema: 0
+               OpCapability MinLod
+               OpCapability FragmentShaderSampleInterlockEXT
+               OpCapability FragmentShaderPixelInterlockEXT
+               OpCapability FragmentShaderShadingRateInterlockEXT
+               OpCapability ComputeDerivativeGroupQuadsNV
+               OpCapability ComputeDerivativeGroupLinearNV
+               OpCapability RayQueryKHR
+               OpCapability Shader
+               OpExtension "SPV_EXT_fragment_shader_interlock"
+               OpExtension "SPV_NV_compute_shader_derivatives"
+               OpExtension "SPV_KHR_ray_query"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %main "main"
+               OpExecutionMode %main LocalSize 1 1 1
+               OpSource HLSL 600
+               OpName %main "main"
+               OpName %src_main "src.main"
+               OpName %bb_entry "bb.entry"
+               OpName %cond "cond"
+               OpName %do_while_header "do_while.header"
+               OpName %do_while_body "do_while.body"
+               OpName %if_true "if.true"
+               OpName %if_merge "if.merge"
+               OpName %if_true_0 "if.true"
+               OpName %if_false "if.false"
+               OpName %if_true_1 "if.true"
+               OpName %if_merge_0 "if.merge"
+               OpName %if_merge_1 "if.merge"
+               OpName %do_while_continue "do_while.continue"
+               OpName %do_while_merge "do_while.merge"
+       %bool = OpTypeBool
+      %false = OpConstantFalse %bool
+       %void = OpTypeVoid
+          %5 = OpTypeFunction %void
+%_ptr_Function_bool = OpTypePointer Function %bool
+       %main = OpFunction %void None %5
+          %6 = OpLabel
+          %7 = OpFunctionCall %void %src_main
+               OpReturn
+               OpFunctionEnd
+   %src_main = OpFunction %void None %5
+   %bb_entry = OpLabel
+       %cond = OpVariable %_ptr_Function_bool Function
+               OpStore %cond %false
+               OpBranch %do_while_header
+%do_while_header = OpLabel
+               OpLoopMerge %do_while_merge %do_while_continue None
+               OpBranch %do_while_body
+%do_while_body = OpLabel
+         %16 = OpLoad %bool %cond
+               OpSelectionMerge %if_merge None
+               OpBranchConditional %16 %if_true %if_merge
+    %if_true = OpLabel
+               OpBranch %do_while_merge
+   %if_merge = OpLabel
+         %19 = OpLoad %bool %cond
+               OpSelectionMerge %if_merge_1 None
+               OpBranchConditional %19 %if_true_0 %if_false
+  %if_true_0 = OpLabel
+               OpBranch %if_merge_1
+   %if_false = OpLabel
+         %23 = OpLoad %bool %cond
+               OpSelectionMerge %if_merge_0 None
+               OpBranchConditional %23 %if_true_1 %if_merge_0
+  %if_true_1 = OpLabel
+               OpBranch %do_while_merge
+ %if_merge_0 = OpLabel
+               OpBranch %if_merge_1
+ %if_merge_1 = OpLabel
+               OpBranch %do_while_continue
+%do_while_continue = OpLabel
+         %26 = OpLoad %bool %cond
+               OpBranchConditional %26 %do_while_header %do_while_merge
+%do_while_merge = OpLabel
+               OpReturn
+               OpFunctionEnd
+
