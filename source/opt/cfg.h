@@ -30,10 +30,10 @@ class CFG {
  public:
   explicit CFG(Module* module);
 
-  std::vector<const BasicBlock*> preds(const BasicBlock* b) const {
-    std::vector<const BasicBlock*> output;
+  std::unordered_set<const BasicBlock*> preds(const BasicBlock* b) const {
+    std::unordered_set<const BasicBlock*> output;
     for (uint32_t id : label2preds_.at(b->id())) {
-      output.push_back(block(id));
+      output.insert(block(id));
     }
     return output;
   }
@@ -45,6 +45,14 @@ class CFG {
     if (label2preds_.count(blk_id) == 0)
       return empty;
     return label2preds_.at(blk_id);
+  }
+
+  const std::unordered_set<const BasicBlock*> successors(const BasicBlock* b) const {
+    std::unordered_set<const BasicBlock*> output;
+    b->ForEachSuccessorLabel([this, &output](const uint32_t id) {
+        output.insert(this->block(id));
+    });
+    return output;
   }
 
   // Return a pointer to the basic block instance corresponding to the label

@@ -156,6 +156,12 @@ class BasicBlock {
   inline bool WhileEachPhiInst(const std::function<bool(Instruction*)>& f,
                                bool run_on_debug_line_insts = false);
 
+  size_t GetSuccessorCount() const {
+    size_t count = 0;
+    ForEachSuccessorLabel([&count](const uint32_t) { ++count; });
+    return count;
+  }
+
   // Runs the given function |f| on each label id of each successor block
   void ForEachSuccessorLabel(
       const std::function<void(const uint32_t)>& f) const;
