@@ -21,6 +21,7 @@
 
 #include "source/opt/instruction.h"
 #include "source/opt/ir_context.h"
+#include "source/opt/ir_builder.h"
 #include "source/util/string_utils.h"
 
 namespace spvtools {
@@ -84,7 +85,26 @@ struct Construction {
   const BasicBlock *merge;
   const BasicBlock *continue_target;
 
-  std::unordered_set<Construction*> children;
+  std::vector<Construction*> children;
+  Construction *parent;
+
+  void dump(size_t indent_size = 0) const {
+    std::string indent(indent_size * 4, ' ');
+
+    std::cout << indent << "{" << std::endl;
+    std::cout << indent << "  type: " << (continue_target ? "loop" : "condition") << std::endl;
+    std::cout << indent << "  header:" << header->id() << std::endl;
+    std::cout << indent << "  merge:" << merge->id() << std::endl;
+    if (continue_target) {
+      std::cout << indent << "  continue:" << continue_target->id() << std::endl;
+    }
+
+    std::cout << indent << "  children: {" << std::endl;
+    for (const auto& child : children)
+      child->dump(indent_size + 1);
+    std::cout << indent << "  }" << std::endl;
+    std::cout << indent << "}" << std::endl;
+  }
 };
 
 class Structurizer {
@@ -95,9 +115,6 @@ private:
   DominatorTree dtree_;
   DominatorTree pdtree_;
 
-  std::unordered_set<const BasicBlock*> candidates_;
-  std::unordered_set<const Construction*> constructions_;
-
 public:
   Structurizer(const CFG& cfg, const Function& function) :
     cfg_(cfg), function_(function), dtree_(/* postdominator= */ false), pdtree_(/* postdominator= */ true) {
@@ -105,87 +122,27 @@ public:
     pdtree_.InitializeTree(cfg, &function);
   }
 
-  void Structurize() {
-    FindCandidates();
-    for (auto block : candidates_) {
-      std::cout << "candidate: " << block->id() << std::endl;
-    }
+  using BlockSet = std::unordered_set<const BasicBlock*>;
 
-    IdentifyConstructs();
-    for (const auto& item : constructions_) {
-      std::cout << (item->continue_target ? "loop:" : "condition:") << std::endl;
-      std::cout << "    header:" << item->header->id() << std::endl;
-      std::cout << "     merge:" << item->merge->id() << std::endl;
-      if (item->continue_target) {
-        std::cout << "  continue:" << item->continue_target->id() << std::endl;
-      }
-    }
+  Pass::Status Structurize(IRContext *context) {
+    const BasicBlock *entry = &*function_.entry();
+    BlockSet exits;
+    for (const BasicBlock& block : function_)
+      if (spvOpcodeIsReturn(block.ctail()->opcode()))
+        exits.insert(&block);
+    assert(exits.size() == 1);
+
+    dtree_.DumpTreeAsDot(std::cout);
+    pdtree_.DumpTreeAsDot(std::cout);
+
+    std::vector<Construction*> constructions = FindChildConstructions(nullptr, entry, *exits.begin());
+    for (const Construction* c : constructions)
+      c->dump();
+
+    return PatchConstructions(context, constructions);
   }
 
 private:
-  // Finds all blocks with an in-degree or out-degree of 2 or more.
-  void FindCandidates() {
-    assert(candidates_.size() == 0);
-    for (const auto& block : function_) {
-      if (cfg_.preds(block.id()).size() > 1 ||
-          block.GetSuccessorCount() > 1) {
-        candidates_.insert(&block);
-      }
-    }
-  }
-
-  // Given a list of basic blocks, returns the single block dominating all the others.
-  // If the dominator tree candidates are siblings, returns the one post-dominating the other siblings.
-  // If the candidates are sibling in both dom, and pdom trees, a random one is returned.
-  const BasicBlock* GetNextTask() const {
-    std::queue<const DominatorTreeNode*> to_visit;
-    // This is a function CFG, we can have only 1 root.
-    to_visit.push(dtree_.GetRoot());
-    to_visit.push(nullptr);
-
-    const BasicBlock* task = nullptr;
-
-    while (to_visit.size() != 0) {
-      const auto *node = to_visit.front();
-      to_visit.pop();
-
-      // Each null inserted marks the end of a siblings level.
-      if (node == nullptr) {
-        to_visit.push(nullptr);
-
-        // If we found a candidate, we can return.
-        if (task != nullptr)
-          break;
-
-        // Otherwise, let's continue onto the next level.
-        continue;
-      }
-
-      // The node we traverse is a candidate.
-      if (candidates_.count(node->bb_) != 0) {
-        // This is a BFS. Either we already found the best node (and exited),
-        // or the alternative is a sibling.
-
-        // First case: no candidate found yet. Select this one.
-        if (task == nullptr) {
-          task = node->bb_;
-        } else if (pdtree_.Dominates(node->bb_, task)) {
-          // Or the alternative is a sibling. 2 Options:
-          // - siblings are in 2 independent construct. Order doesn't matter.
-          // - one sibling construct wraps the other. If it doesn't dominates, maybe it post-dominates?
-          task = node->bb_;
-        }
-      }
-
-      // Continue with the children.
-      for (auto *child : node->children_)
-        to_visit.push(child);
-    }
-
-    assert(task != nullptr);
-    return task;
-  }
-
   // Given a basic block `A`, returns all the blocks `B` dominated by `A` with an edge `B` -> `A`.
   std::unordered_set<const BasicBlock*> GetBackEdgeBlocks(const BasicBlock* block) const {
     std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
@@ -198,34 +155,91 @@ private:
     return output;
   }
 
-  Construction* IdentifySelectionConstructFromMerge(const BasicBlock*) {
-    assert(0 && "unimplemented");
-    return nullptr;
-  }
+  // Returns true if the BB |dst| is reachable from |src|.
+  bool IsReachableFrom(const BasicBlock *src, const BasicBlock *dst) {
+    std::unordered_set<const BasicBlock*> visited;
+    std::queue<const BasicBlock*> to_visit;
+    to_visit.push(src);
 
-  Construction* IdentifySelectionConstructFromHeader(const BasicBlock*) {
-    assert(0 && "unimplemented");
-    return nullptr;
-  }
+    while (to_visit.size() != 0) {
+      const BasicBlock *item = to_visit.front();
+      to_visit.pop();
 
-  Construction* IdentifySelectionConstruct(const BasicBlock *block) {
-    std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
-    std::unordered_set<const BasicBlock*> successors = cfg_.successors(block);
+      if (visited.count(item) != 0)
+        continue;
+      visited.insert(item);
 
-    if (successors.size() == 1) {
-      assert(predecessors.size() != 1);
-      return IdentifySelectionConstructFromMerge(block);
+      if (item == dst)
+        return true;
+
+      item->ForEachSuccessorLabel([this, &to_visit](const uint32_t id) {
+          to_visit.push(cfg_.block(id));
+      });
     }
 
-    if (predecessors.size() == 1) {
-      assert(successors.size() != 1);
-      return IdentifySelectionConstructFromHeader(block);
-    }
-
-    assert(0 && "Block is a merge and a header. Not handled.");
-    return nullptr;
+    return false;
   }
 
+  bool IsDAGOrdered(const BasicBlock *a, const BasicBlock *b, const BasicBlock *c) {
+    return IsDAGOrdered(a, b) && IsDAGOrdered(b, c);
+  }
+
+  bool IsDAGOrdered(const BasicBlock *a, const BasicBlock *b) {
+    std::queue<const BasicBlock*> to_visit;
+    to_visit.push(a);
+    BlockSet visited;
+
+    while (to_visit.size() > 0) {
+      const BasicBlock *item = to_visit.front();
+      to_visit.pop();
+
+      if (visited.count(item) != 0)
+        continue;
+      visited.insert(item);
+
+      if (item == b)
+        return true;
+
+      for (const BasicBlock *child : cfg_.successors(item))
+        to_visit.push(child);
+    }
+
+    return false;
+  }
+
+#if 0
+  bool IsAfterDAGOrder(const BasicBlock *src, const BasicBlock *dst) {
+    if (src == dst)
+      return false;
+
+    std::unordered_set<const BasicBlock*> visited;
+    std::queue<const BasicBlock*> to_visit;
+    to_visit.push(src);
+
+    while (to_visit.size() != 0) {
+      const BasicBlock *item = to_visit.front();
+      to_visit.pop();
+
+      if (visited.count(item) != 0)
+        continue;
+      visited.insert(item);
+
+      if (dtree_.StrictlyDominates(item, src))
+        continue;
+
+      if (item == dst)
+        return true;
+
+      item->ForEachSuccessorLabel([this, &to_visit](const uint32_t id) {
+          to_visit.push(cfg_.block(id));
+      });
+    }
+
+    return false;
+  }
+#endif
+
+  // Given a block belonging to a loop, returns all the blocks in the loop.
   std::unordered_set<const BasicBlock*> GetLoopBlocks(const BasicBlock *header) const {
     std::unordered_set<const BasicBlock*> output;
     std::unordered_set<const BasicBlock*> visited;
@@ -253,6 +267,7 @@ private:
     return output;
   }
 
+  // Given a loop, find all the basic block directly reachable from the loop which are not part of the loop.
   std::unordered_set<const BasicBlock*> FindExitNodes(const std::unordered_set<const BasicBlock*>& loop) const {
     std::unordered_set<const BasicBlock*> output;
     for (const auto node : loop) {
@@ -265,141 +280,330 @@ private:
     return output;
   }
 
-  const BasicBlock* FindMergeBlock(std::unordered_set<const BasicBlock*> branches) const {
-    std::queue<const BasicBlock*> to_process;
-    std::unordered_set<const BasicBlock *> visited;
-    for (auto blk : branches)
-      to_process.push(blk);
 
-    while (to_process.size() != 0) {
-      auto blk = to_process.front();
-      to_process.pop();
+  // Returns the first basic block strictly post-dominating both |lhs| and |rhs|, nullptr otherwise.
+  const BasicBlock* FindImmediateCommonPostDominator(const BasicBlock *lhs, const BasicBlock *rhs) {
+    //const BasicBlock *result = nullptr;
+    //pdtree_.DumpTreeAsDot(std::cout);
 
-      if (visited.count(blk) != 0)
-        continue;
-      visited.insert(blk);
+    std::array<const BasicBlock*, 2> nodes = { lhs, rhs };
+    std::array<std::vector<const BasicBlock*>, 2> ancestors;
+    assert(nodes.size() == 2 && nodes.size() == ancestors.size());
 
-      const bool immediate_pdom = std::all_of(branches.cbegin(), branches.cend(), [this, &blk](const BasicBlock* pred) {
-            return pdtree_.Dominates(blk, pred);
-      });
-
-      if (immediate_pdom) {
-        return blk;
+    for (size_t i = 0; i < nodes.size(); i++) {
+      DominatorTreeNode *node = pdtree_.GetTreeNode(nodes[i]);
+      // Skip self.
+      node = node->parent_;
+      while (node != nullptr) {
+        ancestors[i].push_back(node->bb_);
+        node = node->parent_;
       }
-
-      blk->ForEachSuccessorLabel([this, &to_process](const uint32_t id) {
-        to_process.push(cfg_.block(id));
-      });
     }
+
+    const auto& lhs_ancestors = ancestors[0];
+    const auto& rhs_ancestors = ancestors[1];
+    for (size_t il = 0; il < lhs_ancestors.size(); il++) {
+      for (size_t ir = 0; ir < rhs_ancestors.size(); ir++) {
+        if (lhs_ancestors[il] == rhs_ancestors[ir])
+          return lhs_ancestors[il];
+      }
+    }
+
     return nullptr;
   }
 
-  Construction* IdentifyLoopConstruct(const BasicBlock *block) {
-    std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
-    std::unordered_set<const BasicBlock*> successors = cfg_.successors(block);
-    std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(block);
+  // Visits all the successors of |block| in DAG order, but only if |block| dominates them.
+  void VisitDominatedSuccessors(const BasicBlock *block, std::function<void(const BasicBlock*, size_t)> visit) {
+    assert(block != nullptr);
 
-    // Don't think we can have 2 back-edges. FIXME: figure this out.
-    assert(back_edge_blocks.size() == 1);
-    // A loop header cannot be a merge block. FIXME: create a pre-process to split those cases.
-    assert(predecessors.size() == 2);
+    BlockSet visited;
+    size_t depth = 0;
+    std::queue<const BasicBlock*> to_visit;
+    to_visit.push(block);
+    to_visit.push(nullptr);
 
-    std::unordered_set<const BasicBlock*> loop_blocks = GetLoopBlocks(block);
-    std::unordered_set<const BasicBlock*> exit_blocks = FindExitNodes(loop_blocks);
+    while (to_visit.size() != 0) {
+      const BasicBlock *item = to_visit.front();
+      to_visit.pop();
 
-    Construction *output = new Construction();
-    output->continue_target = *back_edge_blocks.begin();
-    output->header = block;
-    output->merge = FindMergeBlock(exit_blocks);
-
-    candidates_.erase(output->header);
-    candidates_.erase(output->merge);
-    candidates_.erase(output->continue_target);
-    return output;
-  }
-
-  // Identifies selection/loop constructs in the function.
-  void IdentifyConstructs() {
-    while (candidates_.size() != 0) {
-      const BasicBlock* item = GetNextTask();
-      candidates_.erase(item);
-      std::cout << "Figuring out construction for node " << item->id() << std::endl;
-
-      std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(item);
-      const bool is_loop_header = back_edge_blocks.size() != 0;
-
-      Construction *construction = nullptr;
-      if (is_loop_header)
-        construction = IdentifyLoopConstruct(item);
-      else {
-        //construction = IdentifySelectionConstruct(item);
+      if (item == nullptr) {
+        depth++;
+        if (to_visit.size() != 0)
+          to_visit.push(nullptr);
+        continue;
       }
 
-      if (construction != nullptr)
-        constructions_.insert(construction);
-      //assert(construction != nullptr);
-      // FIXME: figure out how to detect sibling/child construct, so I can pass the parent.
+      if (visited.count(item) != 0)
+        continue;
+      visited.insert(item);
+
+      for (const BasicBlock *child : cfg_.successors(item))
+        to_visit.push(child);
+
+      visit(item, depth);
     }
+  }
+
+  // Given 2 BBs |lhs| and |rhs|, find the first successor in DAG order reachable from both.
+  // note: not an actual path finding, doesn't visit back-edges.
+  const BasicBlock* FindClosestCommonSuccessor(const BasicBlock *lhs, const BasicBlock *rhs) {
+    std::unordered_map<const BasicBlock*, size_t> depth_map;
+
+    VisitDominatedSuccessors(lhs, [&depth_map](const BasicBlock *blk, size_t depth) {
+        depth_map[blk] = depth;
+    });
+
+    const BasicBlock *best_block = nullptr;
+    VisitDominatedSuccessors(rhs, [&depth_map, &best_block](const BasicBlock *blk, size_t depth) {
+        if (depth_map.count(blk) == 0)
+          return;
+
+        if (best_block == nullptr || depth_map[best_block] > depth)
+          best_block = blk;
+    });
+
+    return best_block;
+  }
+
+private:
+  Pass::Status PatchConstructions(IRContext *context, const std::vector<Construction*>& constructions) {
+    bool modified = false;
+    std::queue<Construction*> to_patch;
+    for (Construction *item : constructions)
+      to_patch.push(item);
+
+    while (to_patch.size() != 0) {
+      const Construction *item = to_patch.front();
+      to_patch.pop();
+
+      for (Construction *child : item->children)
+        to_patch.push(child);
+
+      const bool is_loop = item->continue_target != nullptr;
+
+      // Get the RW version of the basic block now.
+      BasicBlock *header = cfg_.block(item->header->id());
+      InstructionBuilder builder(context, &*header->tail());
+      const spv::Op opcode = header->tail()->opcode();
+
+      if (!is_loop) {
+        std::cout << "patching node " << item->header->id() << std::endl;
+        assert(opcode == spv::Op::OpBranchConditional);
+
+        builder.AddSelectionMerge(item->merge->id());
+        modified = true;
+      } else {
+        std::cout << "patching node " << item->header->id() << std::endl;
+        assert(opcode == spv::Op::OpBranch || opcode == spv::Op::OpBranchConditional);
+
+        builder.AddLoopMerge(item->merge->id(), item->continue_target->id());
+        modified = true;
+      }
+    }
+
+    return modified ? Pass::Status::SuccessWithChange : Pass::Status::SuccessWithoutChange;
+  }
+
+  void DumpSet(const std::string& title, const BlockSet& set) {
+    std::cout << title << "{ ";
+    for (const BasicBlock *block : set)
+      std::cout << block->id() << ", ";
+    std::cout << "}" << std::endl;
+  }
+
+  const Construction* GetInnermostLoop(const Construction *from) {
+    while (from != nullptr) {
+      if (from->continue_target != nullptr)
+        break;
+      from = from->parent;
+    }
+    return from;
+  }
+
+  bool IsConstructionHeaderBlock(const BasicBlock *block) {
+      std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
+      std::unordered_set<const BasicBlock*> successors = cfg_.successors(block);
+
+      // Not a conditional branch nor a merge node.
+      if (predecessors.size() <= 1 && successors.size() <= 1)
+        return false;
+
+      std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(block);
+      const bool is_loop_header = back_edge_blocks.size() != 0;
+      return is_loop_header || successors.size() > 1;
+  }
+
+  bool IsMergeBlock(const BasicBlock *block) {
+      std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(block);
+      std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
+      return back_edge_blocks.size() == 0 && predecessors.size() > 1;
+  }
+
+  bool IsContinueBlock(const BasicBlock *block) {
+      std::unordered_set<const BasicBlock*> successors = cfg_.successors(block);
+      for (const BasicBlock *s : successors)
+        if (dtree_.StrictlyDominates(s, block))
+          return true;
+      return false;
+  }
+
+  bool IsLoopHeader(const BasicBlock *block) {
+      std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(block);
+      return back_edge_blocks.size() == 1;
+  }
+
+  Construction* FindLoopConstruction(Construction *parent, const BasicBlock *, const BasicBlock *exit, const BasicBlock *header) {
+    std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(header);
+    assert(back_edge_blocks.size() == 1 && "Only 1 back-edge is allowed.");
+
+    Construction *c = new Construction();
+    c->parent = parent;
+    c->header = header;
+    c->continue_target = *back_edge_blocks.begin();
+
+    const BasicBlock *merge = FindImmediateCommonPostDominator(c->header, c->continue_target);
+    if (pdtree_.Dominates(exit, merge))
+      c->merge = merge;
+    else {
+      assert(0 && "Figure this out.");
+    }
+
+    c->dump();
+    c->children = FindChildConstructions(c, c->header, c->merge);
+    return c;
+  }
+
+  Construction* FindSelectionConstruction(Construction *parent, const BasicBlock *, const BasicBlock *exit, const BasicBlock *header) {
+    std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(header);
+    std::unordered_set<const BasicBlock*> successors = cfg_.successors(header);
+    assert(back_edge_blocks.size() == 0);
+    assert(successors.size() == 2);
+
+    Construction *c = new Construction();
+    c->parent = parent;
+    c->header = header;
+    c->continue_target = nullptr;
+
+    // Multiple cases for the branch:
+    //  - both branches merge into a single node, the first common immediate pdom.
+    //  - one branch early returns.
+    //  - one branch breaks out of the innermost loop.
+    //  - one branch continues the innermost loop.
+
+    const BasicBlock *lhs = *successors.begin();
+    const BasicBlock *rhs = *std::next(successors.begin());
+
+    do {
+      const Construction *innermost_loop = GetInnermostLoop(parent);
+      const BasicBlock *exit_continue = innermost_loop ? innermost_loop->continue_target : nullptr;
+      const BasicBlock *exit_merge = innermost_loop ? innermost_loop->merge : nullptr;
+
+      // both branches merge into a single node, first immediate pdom, dominated by the parent construct.
+      const BasicBlock *merge = FindClosestCommonSuccessor(lhs, rhs);
+      //FindImmediateCommonPostDominator(lhs, rhs);
+      if (merge != nullptr)
+        std::cout << "  Found common pdom: " << merge->id() << std::endl;
+      else
+        std::cout << "  No common pdom." << std::endl;
+
+      if (merge != nullptr && merge != exit_merge && merge != exit_continue && pdtree_.StrictlyDominates(exit, merge)) {
+        std::cout << "  selecting " << merge->id() << " because obvious selection merge node.";
+        c->merge = merge;
+        break;
+      }
+
+
+      // In the normal case, the merge node strictly dominates the exit node. But if the function return
+      // is the merge node, then the exit could also be this construction merge node.
+      if (innermost_loop == nullptr) {
+        // But I don't want an inner construct merge node to share the parent construct merge, hence
+        // this is only allowed for the top-level constructs.
+        assert(parent == nullptr);
+        c->merge = merge;
+        break;
+      }
+
+      assert(innermost_loop != nullptr);
+      BlockSet loop_blocks = GetLoopBlocks(innermost_loop->header);
+      std::cout << "loop: {";
+      for (const BasicBlock *blk : loop_blocks)
+        std::cout << blk->id() << ", ";
+      std::cout << std::endl;
+
+      // The first common pdom is outside or the parent construct, or there is none. This means
+      // one branch returns, or merge/continues in the innermost loop.
+      if (loop_blocks.count(lhs) == 0) {
+        std::cout << "  selecting " << rhs->id() << " because " << lhs->id() << " exits the innermost loop.\n";
+        c->merge = rhs;
+      }
+      else {
+        std::cout << "  selecting " << lhs->id() << " because " << rhs->id() << " exits the innermost loop.\n";
+        c->merge = lhs;
+      }
+    } while (false);
+
+    assert(c->merge != nullptr);
+    c->dump();
+    c->children = FindChildConstructions(c, c->header, c->merge);
+    return c;
+  }
+
+  std::vector<Construction*> FindChildConstructions(Construction *parent, const BasicBlock *entry, const BasicBlock *exit) {
+    std::queue<const BasicBlock*> to_process;
+    {
+      const auto children = cfg_.successors(entry);
+      for (const BasicBlock *child : children)
+        to_process.push(child);
+    }
+
+    std::vector<Construction*> output;
+    BlockSet visited;
+
+    while (to_process.size() != 0) {
+      const BasicBlock *item = to_process.front();
+      to_process.pop();
+      std::cout << "{ entry=" << entry->id() << ", exit=" << exit->id() << ", item=" << item->id() << "}" << std::endl;
+
+      // Handle loops for visitor.
+      if (visited.count(item) != 0) {
+        std::cout << " - visited." << std::endl;
+        continue;
+      }
+      visited.insert(item);
+
+      // The reached block is outside of the parent construction. Ignoring.
+      if (!IsDAGOrdered(entry, item, exit) || item == exit) {
+      //if (!IsAfterDAGOrder(entry, item) || !IsAfterDAGOrder(item, exit)) {
+        std::cout << " - not in range." << std::endl;
+        continue;
+      }
+
+      if (IsContinueBlock(item))
+        continue;
+
+      const auto children = cfg_.successors(item);
+      if (!IsConstructionHeaderBlock(item)) {
+        for (const BasicBlock *child : children)
+          to_process.push(child);
+        continue;
+      }
+
+      std::cout << "Figuring out construction for node " << item->id() << std::endl;
+
+
+      Construction *construction = nullptr;
+      if (IsLoopHeader(item)) {
+        construction = FindLoopConstruction(parent, entry, exit, item);
+      } else {
+        construction = FindSelectionConstruction(parent, entry, exit, item);
+      }
+      output.push_back(construction);
+      to_process.push(construction->merge);
+    }
+    return output;
   }
 };
 
-
-#if 0
-
-
-    if (!isLoopHeader(dtree, item)) {
-      std::cout << "block is a condition merge block." << std::endl;
-      Construction c;
-      c.merge = item;
-      c.header = dtree.ImmediateDominator(item);
-      c.continue_target = nullptr;
-
-      assert(c.header != nullptr);
-      assert(c.merge != nullptr);
-      assert(c.continue_target == nullptr);
-      output.push_back(c);
-      continue;
-    }
-
-    // There is a back-edge.
-    std::cout << "block is part of a loop." << std::endl;
-    auto nodes_in_loop = get_loop_nodes(cfg, dtree, item);
-    std::cout << "nodes in the loop:" << std::endl;
-    for (const auto& node : nodes_in_loop) {
-      std::cout << "   - " << node->id() << std::endl;
-    }
-
-    Construction c;
-    c.header = item;
-    c.merge = nullptr;
-    c.continue_target = nullptr;
-
-    // Finding the continue target.
-    for (auto pred : predecessors) {
-      if (nodes_in_loop.count(pred) != 0) {
-        assert(c.continue_target == nullptr);
-        c.continue_target = pred;
-      }
-    }
-
-    auto exit_blocks = find_exit_nodes(cfg, nodes_in_loop);
-    if (exit_blocks.size() == 0)
-      assert(0 && "Loop with no exit. Don't know what to do.");
-    else if (exit_blocks.size() == 1)
-      c.merge = *exit_blocks.begin();
-    else {
-      c.merge = find_merge_block(cfg, pdtree, exit_blocks);
-    }
-
-    assert(c.header != nullptr);
-    assert(c.continue_target != nullptr);
-    assert(c.merge != nullptr);
-    output.push_back(c);
-  }
-
-  return output;
-}
-#endif
 
 Pass::Status StructurizePass::Process() {
   const auto& cfg = *context()->cfg();
@@ -407,7 +611,9 @@ Pass::Status StructurizePass::Process() {
 
   for (const auto& function : *context()->module()) {
     Structurizer structurizer(cfg, function);
-    structurizer.Structurize();
+    Pass::Status status = structurizer.Structurize(context());
+    if (status == Status::SuccessWithChange)
+      modified = true;
   }
 
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;

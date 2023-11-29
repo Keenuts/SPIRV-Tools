@@ -241,12 +241,12 @@ class DominatorTree {
 
   // Returns the DominatorTreeNode associated with the basic block |bb|.
   // If the |bb| is unknown to the dominator tree, it returns null.
-  inline DominatorTreeNode* GetTreeNode(BasicBlock* bb) {
+  inline DominatorTreeNode* GetTreeNode(const BasicBlock* bb) {
     return GetTreeNode(bb->id());
   }
   // Returns the DominatorTreeNode associated with the basic block |bb|.
   // If the |bb| is unknown to the dominator tree, it returns null.
-  inline const DominatorTreeNode* GetTreeNode(BasicBlock* bb) const {
+  inline const DominatorTreeNode* GetTreeNode(const BasicBlock* bb) const {
     return GetTreeNode(bb->id());
   }
 
