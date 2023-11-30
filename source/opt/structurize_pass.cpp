@@ -76,7 +76,7 @@ const BasicBlock* find_merge_block(const CFG& cfg, const DominatorTree& pdtree, 
 #endif
 
 namespace {
-
+  using BlockSet = std::unordered_set<const BasicBlock*>;
 } // end anonymous namespace.
 
 
@@ -109,18 +109,17 @@ struct Construction {
 
 class Structurizer {
 public:
-  using BlockSet = std::unordered_set<const BasicBlock*>;
 
 private:
   const CFG& cfg_;
-  const Function& function_;
+  Function& function_;
 
   DominatorTree dtree_;
   DominatorTree pdtree_;
   BlockSet processed_headers_;
 
 public:
-  Structurizer(const CFG& cfg, const Function& function) :
+  Structurizer(const CFG& cfg, Function& function) :
     cfg_(cfg), function_(function), dtree_(/* postdominator= */ false), pdtree_(/* postdominator= */ true) {
     dtree_.InitializeTree(cfg, &function);
     pdtree_.InitializeTree(cfg, &function);
@@ -680,12 +679,56 @@ private:
   }
 };
 
+class MergeReturn {
+private:
+  Function& function_;
+public:
+  MergeReturn(Function& function) : function_(function) { }
+
+  BasicBlock* Process(IRContext *context, const BlockSet& exits) {
+    const uint32_t merge_label = context->TakeNextId();
+    std::unique_ptr<Instruction> label_inst(
+        new Instruction(context, spv::Op::OpLabel, 0, merge_label, {}));
+    std::unique_ptr<BasicBlock> bb(new BasicBlock(std::move(label_inst)));
+    function_.AddBasicBlock(std::move(bb));
+    BasicBlock *output = function_.tail();
+
+    {
+      InstructionBuilder builder(context, output);
+      builder.AddNullaryOp(0, spv::Op::OpReturn);
+      //output->AddInstruction(new Instruction(context, spv::Op::OpReturn, 0, {}));
+    }
+
+    for (auto exit : exits) {
+      BasicBlock *block = &*function_.FindBlock(exit->id());
+
+      InstructionBuilder builder(context, &*block->tail());
+      builder.AddBranch(merge_label);
+      context->KillInst(&*block->tail());
+    }
+
+    context->InvalidateAnalysesExceptFor(IRContext::Analysis::kAnalysisNone);
+    return output;
+  }
+};
 
 Pass::Status StructurizePass::Process() {
-  const auto& cfg = *context()->cfg();
   bool modified = false;
 
-  for (const auto& function : *context()->module()) {
+  for (auto& function : *context()->module()) {
+
+    BlockSet exits;
+    for (const BasicBlock& block : function)
+      if (spvOpcodeIsReturn(block.ctail()->opcode()))
+        exits.insert(&block);
+
+    if (exits.size() > 1) {
+      MergeReturn pass(function);
+      pass.Process(context(), exits);
+      modified = true;
+    }
+
+    const auto& cfg = *context()->cfg();
     Structurizer structurizer(cfg, function);
     Pass::Status status = structurizer.Structurize(context());
     if (status == Status::SuccessWithChange)
