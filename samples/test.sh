@@ -3,7 +3,7 @@
 #set -e
 
 for f in $(ls *.o); do
-  echo "Processing $f."
+  echo "Testing $f."
   basename="$(echo $f | cut -d '.' -f 1)"
 
   spirv-opt --structurize --skip-validation $f -o /tmp/$basename.scfg.o > /dev/null

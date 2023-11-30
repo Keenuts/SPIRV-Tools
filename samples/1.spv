@@ -1,0 +1,31 @@
+; SPIR-V
+; Version: 1.6
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 21
+; Schema: 0
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "main"
+               OpExecutionMode %1 LocalSize 1 1 1
+       %void = OpTypeVoid
+         %12 = OpTypeFunction %void
+       %bool = OpTypeBool
+      %false = OpConstantFalse %bool
+       %uint = OpTypeInt 32 0
+     %uint_0 = OpConstant %uint 0
+          %1 = OpFunction %void None %12
+         %14 = OpLabel
+               OpReturn
+               OpFunctionEnd
+          %2 = OpFunction %void None %12
+          %3 = OpLabel
+               OpBranch %5
+          %5 = OpLabel
+               OpBranchConditional %false %6 %8
+          %6 = OpLabel
+               OpBranch %7
+          %7 = OpLabel
+               OpBranch %5
+          %8 = OpLabel
+               OpReturn
+               OpFunctionEnd

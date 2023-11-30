@@ -108,12 +108,16 @@ struct Construction {
 };
 
 class Structurizer {
+public:
+  using BlockSet = std::unordered_set<const BasicBlock*>;
+
 private:
   const CFG& cfg_;
   const Function& function_;
 
   DominatorTree dtree_;
   DominatorTree pdtree_;
+  BlockSet processed_headers_;
 
 public:
   Structurizer(const CFG& cfg, const Function& function) :
@@ -122,7 +126,6 @@ public:
     pdtree_.InitializeTree(cfg, &function);
   }
 
-  using BlockSet = std::unordered_set<const BasicBlock*>;
 
   Pass::Status Structurize(IRContext *context) {
     const BasicBlock *entry = &*function_.entry();
@@ -344,6 +347,65 @@ private:
     }
   }
 
+  void VisitSuccessors(const BasicBlock *block, std::function<void(const BasicBlock*, size_t)> visit) {
+    assert(block != nullptr);
+
+    BlockSet visited;
+    size_t distance = 0;
+    std::queue<const BasicBlock*> to_visit;
+    to_visit.push(block);
+    to_visit.push(nullptr);
+
+    while (to_visit.size() != 0) {
+      const BasicBlock *item = to_visit.front();
+      to_visit.pop();
+
+      if (item == nullptr) {
+        distance++;
+        if (to_visit.size() != 0)
+          to_visit.push(nullptr);
+        continue;
+      }
+
+      if (visited.count(item) != 0)
+        continue;
+      visited.insert(item);
+
+      for (const BasicBlock *child : cfg_.successors(item))
+        to_visit.push(child);
+
+      visit(item, distance);
+    }
+  }
+
+  const BasicBlock* FindClosestCommonSuccessor(const BasicBlock *lhs, const BasicBlock *rhs) {
+    std::unordered_map<const BasicBlock*, size_t> distance_from_lhs;
+
+    VisitSuccessors(lhs, [&distance_from_lhs](const BasicBlock *blk, size_t distance) {
+        if (distance_from_lhs.count(blk) != 0)
+          distance_from_lhs[blk] = std::min<size_t>(distance, distance_from_lhs[blk]);
+        else
+          distance_from_lhs[blk] = distance;
+    });
+
+    const BasicBlock *best_block = nullptr;
+    size_t best_distance = 0;
+    VisitDominatedSuccessors(rhs, [&distance_from_lhs, &best_block, &best_distance](const BasicBlock *blk, size_t distance) {
+        if (distance_from_lhs.count(blk) == 0)
+          return;
+
+        size_t current_distance = distance + distance_from_lhs[blk];
+
+        if (best_block == nullptr || current_distance < best_distance) {
+          best_block = blk;
+          best_distance = current_distance;
+        }
+    });
+
+    return best_block;
+  }
+
+#if 0
   // Given 2 BBs |lhs| and |rhs|, find the first successor in DAG order reachable from both.
   // note: not an actual path finding, doesn't visit back-edges.
   const BasicBlock* FindClosestCommonSuccessor(const BasicBlock *lhs, const BasicBlock *rhs) {
@@ -364,6 +426,7 @@ private:
 
     return best_block;
   }
+#endif
 
 private:
   Pass::Status PatchConstructions(IRContext *context, const std::vector<Construction*>& constructions) {
@@ -460,6 +523,7 @@ private:
     c->parent = parent;
     c->header = header;
     c->continue_target = *back_edge_blocks.begin();
+    processed_headers_.insert(c->header);
 
     const BasicBlock *merge = FindImmediateCommonPostDominator(c->header, c->continue_target);
     if (pdtree_.Dominates(exit, merge))
@@ -469,7 +533,12 @@ private:
     }
 
     c->dump();
-    c->children = FindChildConstructions(c, c->header, c->merge);
+    //c->children = FindChildConstructions(c, c->header, c->merge);
+    std::unordered_set<const BasicBlock*> successors = cfg_.successors(header);
+    for (auto s : successors) {
+      auto children = FindChildConstructions(c, s, c->merge);
+      c->children.insert(c->children.end(), children.cbegin(), children.cend());
+    }
     return c;
   }
 
@@ -483,6 +552,7 @@ private:
     c->parent = parent;
     c->header = header;
     c->continue_target = nullptr;
+    processed_headers_.insert(c->header);
 
     // Multiple cases for the branch:
     //  - both branches merge into a single node, the first common immediate pdom.
@@ -544,17 +614,18 @@ private:
 
     assert(c->merge != nullptr);
     c->dump();
-    c->children = FindChildConstructions(c, c->header, c->merge);
+
+    for (auto s : successors) {
+      auto children = FindChildConstructions(c, s, c->merge);
+      c->children.insert(c->children.end(), children.cbegin(), children.cend());
+    }
+    //c->children = FindChildConstructions(c, c->header, c->merge);
     return c;
   }
 
   std::vector<Construction*> FindChildConstructions(Construction *parent, const BasicBlock *entry, const BasicBlock *exit) {
     std::queue<const BasicBlock*> to_process;
-    {
-      const auto children = cfg_.successors(entry);
-      for (const BasicBlock *child : children)
-        to_process.push(child);
-    }
+    to_process.push(entry);
 
     std::vector<Construction*> output;
     BlockSet visited;
@@ -587,6 +658,11 @@ private:
           to_process.push(child);
         continue;
       }
+
+      //if (processed_headers_.count(item) != 0) {
+      //  std::cout << " - header already handled." << std::endl;
+      //  continue;
+      //}
 
       std::cout << "Figuring out construction for node " << item->id() << std::endl;
 
