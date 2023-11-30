@@ -111,7 +111,7 @@ class Structurizer {
 public:
 
 private:
-  const CFG& cfg_;
+  IRContext *context_;
   Function& function_;
 
   DominatorTree dtree_;
@@ -119,14 +119,14 @@ private:
   BlockSet processed_headers_;
 
 public:
-  Structurizer(const CFG& cfg, Function& function) :
-    cfg_(cfg), function_(function), dtree_(/* postdominator= */ false), pdtree_(/* postdominator= */ true) {
-    dtree_.InitializeTree(cfg, &function);
-    pdtree_.InitializeTree(cfg, &function);
+  Structurizer(IRContext *context, Function& function) :
+    context_(context), function_(function), dtree_(/* postdominator= */ false), pdtree_(/* postdominator= */ true) {
+    dtree_.InitializeTree(*context_->cfg(), &function);
+    pdtree_.InitializeTree(*context_->cfg(), &function);
   }
 
 
-  Pass::Status Structurize(IRContext *context) {
+  Pass::Status Structurize() {
     const BasicBlock *entry = &*function_.entry();
     BlockSet exits;
     for (const BasicBlock& block : function_)
@@ -141,13 +141,20 @@ public:
     for (const Construction* c : constructions)
       c->dump();
 
-    return PatchConstructions(context, constructions);
+
+    Pass::Status result = FixMergeNodes(constructions);
+    for (const Construction* c : constructions)
+      c->dump();
+
+    if (PatchConstructions(constructions) == Pass::Status::SuccessWithChange)
+      result = Pass::Status::SuccessWithChange;
+    return result;
   }
 
 private:
   // Given a basic block `A`, returns all the blocks `B` dominated by `A` with an edge `B` -> `A`.
   std::unordered_set<const BasicBlock*> GetBackEdgeBlocks(const BasicBlock* block) const {
-    std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
+    std::unordered_set<const BasicBlock*> predecessors = context_->cfg()->preds(block);
     std::unordered_set<const BasicBlock*> output;
 
     for (const auto* item : predecessors) {
@@ -175,7 +182,7 @@ private:
         return true;
 
       item->ForEachSuccessorLabel([this, &to_visit](const uint32_t id) {
-          to_visit.push(cfg_.block(id));
+          to_visit.push(context_->cfg()->block(id));
       });
     }
 
@@ -202,7 +209,7 @@ private:
       if (item == b)
         return true;
 
-      for (const BasicBlock *child : cfg_.successors(item))
+      for (const BasicBlock *child : context_->cfg()->successors(item))
         to_visit.push(child);
     }
 
@@ -233,7 +240,7 @@ private:
         return true;
 
       item->ForEachSuccessorLabel([this, &to_visit](const uint32_t id) {
-          to_visit.push(cfg_.block(id));
+          to_visit.push(context_->cfg()->block(id));
       });
     }
 
@@ -262,7 +269,7 @@ private:
       }
 
       output.insert(item);
-      for (auto p : cfg_.preds(item))
+      for (auto p : context_->cfg()->preds(item))
         to_process.push(p);
     }
 
@@ -274,8 +281,8 @@ private:
     std::unordered_set<const BasicBlock*> output;
     for (const auto node : loop) {
       node->ForEachSuccessorLabel([this, &loop, &output](const uint32_t id) {
-        if (loop.count(cfg_.block(id)) == 0)
-          output.insert(cfg_.block(id));
+        if (loop.count(context_->cfg()->block(id)) == 0)
+          output.insert(context_->cfg()->block(id));
       });
     }
 
@@ -339,7 +346,7 @@ private:
         continue;
       visited.insert(item);
 
-      for (const BasicBlock *child : cfg_.successors(item))
+      for (const BasicBlock *child : context_->cfg()->successors(item))
         to_visit.push(child);
 
       visit(item, depth);
@@ -370,7 +377,7 @@ private:
         continue;
       visited.insert(item);
 
-      for (const BasicBlock *child : cfg_.successors(item))
+      for (const BasicBlock *child : context_->cfg()->successors(item))
         to_visit.push(child);
 
       visit(item, distance);
@@ -428,7 +435,82 @@ private:
 #endif
 
 private:
-  Pass::Status PatchConstructions(IRContext *context, const std::vector<Construction*>& constructions) {
+  void DFSConstruction(Construction *root, std::function<void(Construction *item)> operation) {
+    std::stack<Construction*> to_process;
+    to_process.push(root);
+
+    while (to_process.size() != 0) {
+      Construction *item = to_process.top();
+      to_process.pop();
+      for (Construction *child : item->children)
+        to_process.push(child);
+      operation(item);
+    }
+  }
+
+  Pass::Status FixMergeNodes(const std::vector<Construction*>& constructions) {
+    bool modified = true;
+    std::stack<Construction*> to_process;
+    for (Construction *item : constructions)
+      to_process.push(item);
+
+    std::unordered_set<const BasicBlock*> used_merge_nodes;
+    while (to_process.size() != 0) {
+      Construction *item = to_process.top();
+      to_process.pop();
+      for (Construction *child : item->children)
+        to_process.push(child);
+
+      if (used_merge_nodes.count(item->merge) == 0) {
+        used_merge_nodes.insert(item->merge);
+        continue;
+      }
+
+      // The merge node is already used.
+      BasicBlock *merge = &*function_.FindBlock(item->merge->id());
+      std::unordered_set<const BasicBlock*> predecessors = context_->cfg()->preds(merge);
+      modified = true;
+      std::cout << "Merge " << merge->id() << " used by more than 1 construct. Patching." << std::endl;
+
+      BasicBlock *new_merge = nullptr;
+      for (const BasicBlock *block : predecessors) {
+        if (!dtree_.Dominates(item->header, block)) {
+          std::cout << "BB " << block->id() << " left as-is: not dominated by header." << std::endl;
+          continue;
+        }
+
+        if (new_merge == nullptr) {
+          const uint32_t merge_label = context_->TakeNextId();
+          std::unique_ptr<Instruction> label_inst(
+              new Instruction(context_, spv::Op::OpLabel, 0, merge_label, {}));
+          std::unique_ptr<BasicBlock> bb(new BasicBlock(std::move(label_inst)));
+          function_.AddBasicBlock(std::move(bb));
+          new_merge = function_.tail();
+          InstructionBuilder builder(context_, new_merge);
+          builder.AddBranch(merge->id());
+          used_merge_nodes.insert(new_merge);
+
+          std::cout << "Creating new merge block " << new_merge->id() << std::endl;
+        }
+
+        BasicBlock *rw_block = &*function_.FindBlock(block->id());
+        InstructionBuilder builder(context_, &*rw_block->tail());
+        builder.AddBranch(new_merge->id());
+        context_->KillInst(&*rw_block->tail());
+      }
+
+      assert(new_merge != nullptr);
+      context_->InvalidateAnalysesExceptFor(IRContext::Analysis::kAnalysisNone);
+
+      DFSConstruction(item, [merge, new_merge](Construction *c) {
+          if (c->merge == merge)
+            c->merge = new_merge;
+      });
+    }
+    return modified ? Pass::Status::SuccessWithChange : Pass::Status::SuccessWithoutChange;
+  }
+
+  Pass::Status PatchConstructions(const std::vector<Construction*>& constructions) {
     bool modified = false;
     std::queue<Construction*> to_patch;
     for (Construction *item : constructions)
@@ -444,8 +526,8 @@ private:
       const bool is_loop = item->continue_target != nullptr;
 
       // Get the RW version of the basic block now.
-      BasicBlock *header = cfg_.block(item->header->id());
-      InstructionBuilder builder(context, &*header->tail());
+      BasicBlock *header = context_->cfg()->block(item->header->id());
+      InstructionBuilder builder(context_, &*header->tail());
       const spv::Op opcode = header->tail()->opcode();
 
       if (!is_loop) {
@@ -483,8 +565,8 @@ private:
   }
 
   bool IsConstructionHeaderBlock(const BasicBlock *block) {
-      std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
-      std::unordered_set<const BasicBlock*> successors = cfg_.successors(block);
+      std::unordered_set<const BasicBlock*> predecessors = context_->cfg()->preds(block);
+      std::unordered_set<const BasicBlock*> successors = context_->cfg()->successors(block);
 
       // Not a conditional branch nor a merge node.
       if (predecessors.size() <= 1 && successors.size() <= 1)
@@ -497,12 +579,12 @@ private:
 
   bool IsMergeBlock(const BasicBlock *block) {
       std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(block);
-      std::unordered_set<const BasicBlock*> predecessors = cfg_.preds(block);
+      std::unordered_set<const BasicBlock*> predecessors = context_->cfg()->preds(block);
       return back_edge_blocks.size() == 0 && predecessors.size() > 1;
   }
 
   bool IsContinueBlock(const BasicBlock *block) {
-      std::unordered_set<const BasicBlock*> successors = cfg_.successors(block);
+      std::unordered_set<const BasicBlock*> successors = context_->cfg()->successors(block);
       for (const BasicBlock *s : successors)
         if (dtree_.StrictlyDominates(s, block))
           return true;
@@ -533,7 +615,7 @@ private:
 
     c->dump();
     //c->children = FindChildConstructions(c, c->header, c->merge);
-    std::unordered_set<const BasicBlock*> successors = cfg_.successors(header);
+    std::unordered_set<const BasicBlock*> successors = context_->cfg()->successors(header);
     for (auto s : successors) {
       auto children = FindChildConstructions(c, s, c->merge);
       c->children.insert(c->children.end(), children.cbegin(), children.cend());
@@ -543,7 +625,7 @@ private:
 
   Construction* FindSelectionConstruction(Construction *parent, const BasicBlock *, const BasicBlock *exit, const BasicBlock *header) {
     std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(header);
-    std::unordered_set<const BasicBlock*> successors = cfg_.successors(header);
+    std::unordered_set<const BasicBlock*> successors = context_->cfg()->successors(header);
     assert(back_edge_blocks.size() == 0);
     assert(successors.size() == 2);
 
@@ -582,12 +664,11 @@ private:
       }
 
 
-      // In the normal case, the merge node strictly dominates the exit node. But if the function return
-      // is the merge node, then the exit could also be this construction merge node.
+      // In the normal case, the merge node strictly dominates the exit node. But if the function early returns,
+      // the function's return block could be the only 'valid' merge block.
+      // This however means multiple selection construct could share the same merge block, which is illegal.
+      // The fix must be done later, once we figured the construct, by splitting the problematic merge nodes.
       if (innermost_loop == nullptr) {
-        // But I don't want an inner construct merge node to share the parent construct merge, hence
-        // this is only allowed for the top-level constructs.
-        assert(parent == nullptr);
         c->merge = merge;
         break;
       }
@@ -651,7 +732,7 @@ private:
       if (IsContinueBlock(item))
         continue;
 
-      const auto children = cfg_.successors(item);
+      const auto children = context_->cfg()->successors(item);
       if (!IsConstructionHeaderBlock(item)) {
         for (const BasicBlock *child : children)
           to_process.push(child);
@@ -685,16 +766,16 @@ private:
 public:
   MergeReturn(Function& function) : function_(function) { }
 
-  BasicBlock* Process(IRContext *context, const BlockSet& exits) {
-    const uint32_t merge_label = context->TakeNextId();
+  BasicBlock* Process(IRContext *context_, const BlockSet& exits) {
+    const uint32_t merge_label = context_->TakeNextId();
     std::unique_ptr<Instruction> label_inst(
-        new Instruction(context, spv::Op::OpLabel, 0, merge_label, {}));
+        new Instruction(context_, spv::Op::OpLabel, 0, merge_label, {}));
     std::unique_ptr<BasicBlock> bb(new BasicBlock(std::move(label_inst)));
     function_.AddBasicBlock(std::move(bb));
     BasicBlock *output = function_.tail();
 
     {
-      InstructionBuilder builder(context, output);
+      InstructionBuilder builder(context_, output);
       builder.AddNullaryOp(0, spv::Op::OpReturn);
       //output->AddInstruction(new Instruction(context, spv::Op::OpReturn, 0, {}));
     }
@@ -702,12 +783,12 @@ public:
     for (auto exit : exits) {
       BasicBlock *block = &*function_.FindBlock(exit->id());
 
-      InstructionBuilder builder(context, &*block->tail());
+      InstructionBuilder builder(context_, &*block->tail());
       builder.AddBranch(merge_label);
-      context->KillInst(&*block->tail());
+      context_->KillInst(&*block->tail());
     }
 
-    context->InvalidateAnalysesExceptFor(IRContext::Analysis::kAnalysisNone);
+    context_->InvalidateAnalysesExceptFor(IRContext::Analysis::kAnalysisNone);
     return output;
   }
 };
@@ -722,15 +803,16 @@ Pass::Status StructurizePass::Process() {
       if (spvOpcodeIsReturn(block.ctail()->opcode()))
         exits.insert(&block);
 
+    // Merge return blocks.
     if (exits.size() > 1) {
       MergeReturn pass(function);
       pass.Process(context(), exits);
       modified = true;
     }
 
-    const auto& cfg = *context()->cfg();
-    Structurizer structurizer(cfg, function);
-    Pass::Status status = structurizer.Structurize(context());
+    // Determine the control flow constructions.
+    Structurizer structurizer(context(), function);
+    Pass::Status status = structurizer.Structurize();
     if (status == Status::SuccessWithChange)
       modified = true;
   }
