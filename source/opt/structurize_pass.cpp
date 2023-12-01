@@ -803,12 +803,12 @@ Pass::Status StructurizePass::Process() {
       if (spvOpcodeIsReturn(block.ctail()->opcode()))
         exits.insert(&block);
 
-    // Merge return blocks.
-    if (exits.size() > 1) {
-      MergeReturn pass(function);
-      pass.Process(context(), exits);
-      modified = true;
-    }
+    //// Merge return blocks.
+    //if (exits.size() > 1) {
+    //  MergeReturn pass(function);
+    //  pass.Process(context(), exits);
+    //  modified = true;
+    //}
 
     // Determine the control flow constructions.
     Structurizer structurizer(context(), function);
