@@ -23,6 +23,9 @@ bazel-out
 bazel-spirv-tools
 bazel-SPIRV-Tools
 bazel-testlogs
+samples/*.png
+samples/*.o
+samples/*.spv
 
 # Vim
 [._]*.s[a-w][a-z]
