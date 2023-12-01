@@ -76,7 +76,17 @@ const BasicBlock* find_merge_block(const CFG& cfg, const DominatorTree& pdtree, 
 #endif
 
 namespace {
+  template<typename T>
+  struct PairHash {
+    size_t operator()(const std::pair<T, T>& p) const {
+      const size_t a = std::hash<T>{}(p.first);
+      const size_t b = std::hash<T>{}(p.second);
+      return a ^ (b << 1);
+    }
+  };
+
   using BlockSet = std::unordered_set<const BasicBlock*>;
+  using EdgeSet = std::unordered_set<std::pair<const BasicBlock*, const BasicBlock*>, PairHash<const BasicBlock*>>;
 } // end anonymous namespace.
 
 
@@ -116,11 +126,12 @@ private:
 
   DominatorTree dtree_;
   DominatorTree pdtree_;
-  BlockSet processed_headers_;
+  EdgeSet back_edges_;
 
 public:
   Structurizer(IRContext *context, Function& function) :
-    context_(context), function_(function), dtree_(/* postdominator= */ false), pdtree_(/* postdominator= */ true) {
+    context_(context), function_(function), dtree_(/* postdominator= */ false), pdtree_(/* postdominator= */ true), back_edges_({}) {
+    context_->InvalidateAnalysesExceptFor(IRContext::Analysis::kAnalysisNone);
     dtree_.InitializeTree(*context_->cfg(), &function);
     pdtree_.InitializeTree(*context_->cfg(), &function);
   }
@@ -129,15 +140,18 @@ public:
   Pass::Status Structurize() {
     const BasicBlock *entry = &*function_.entry();
     BlockSet exits;
-    for (const BasicBlock& block : function_)
+    for (const BasicBlock& block : function_) {
+      std::cout << "block: " << block.id() << std::endl;
       if (spvOpcodeIsReturn(block.ctail()->opcode()))
         exits.insert(&block);
-    assert(exits.size() == 1);
+    }
+
+    back_edges_ = GetBackEdges();
 
     dtree_.DumpTreeAsDot(std::cout);
     pdtree_.DumpTreeAsDot(std::cout);
 
-    std::vector<Construction*> constructions = FindChildConstructions(nullptr, entry, *exits.begin());
+    std::vector<Construction*> constructions = FindChildConstructions(nullptr, entry, exits);
     for (const Construction* c : constructions)
       c->dump();
 
@@ -152,6 +166,28 @@ public:
   }
 
 private:
+  EdgeSet GetBackEdges() {
+    EdgeSet output;
+
+    BlockSet visited;
+    std::stack<const BasicBlock*> to_visit;
+    to_visit.push(&*function_.entry());
+
+    while (to_visit.size() != 0) {
+      const BasicBlock *item = to_visit.top();
+      to_visit.pop();
+      visited.insert(item);
+
+      for (const BasicBlock *child : context_->cfg()->successors(item)) {
+        if (visited.count(child) != 0)
+          output.insert({item, child});
+        else
+          to_visit.push(child);
+      }
+    }
+    return output;
+  }
+
   // Given a basic block `A`, returns all the blocks `B` dominated by `A` with an edge `B` -> `A`.
   std::unordered_set<const BasicBlock*> GetBackEdgeBlocks(const BasicBlock* block) const {
     std::unordered_set<const BasicBlock*> predecessors = context_->cfg()->preds(block);
@@ -304,7 +340,8 @@ private:
       // Skip self.
       node = node->parent_;
       while (node != nullptr) {
-        ancestors[i].push_back(node->bb_);
+        if (!context_->cfg()->IsPseudoEntryBlock(node->bb_) && !context_->cfg()->IsPseudoExitBlock(node->bb_))
+          ancestors[i].push_back(node->bb_);
         node = node->parent_;
       }
     }
@@ -596,7 +633,54 @@ private:
       return back_edge_blocks.size() == 1;
   }
 
-  Construction* FindLoopConstruction(Construction *parent, const BasicBlock *, const BasicBlock *exit, const BasicBlock *header) {
+  const BasicBlock* FindLatestExitDAG(const BasicBlock *entry, const BlockSet& exits) {
+    const BasicBlock *output = nullptr;
+    size_t output_distance = 0;
+
+    VisitSuccessors(entry, [&output, &output_distance, &exits](const BasicBlock *item, size_t distance) {
+      if (exits.count(item) == 0)
+        return;
+      if (output == nullptr || output_distance > distance) {
+        output = item;
+        output_distance = distance;
+      }
+    });
+
+    return output;
+  }
+
+  static bool IsReturn(const BasicBlock *block) {
+    return block->ctail()->opcode() == spv::Op::OpReturn;
+  }
+
+  BlockSet FindExits(const BasicBlock *from, const BasicBlock *to) {
+    BlockSet output;
+    VisitSuccessors(from, [this, from, to, &output](const BasicBlock *item, size_t) {
+        if (!IsDAGOrdered(from, item, to))
+          return;
+
+        if (IsReturn(item))
+          output.insert(item);
+    });
+    return output;
+  }
+
+  const BasicBlock* FindLoopExit(const BasicBlock *header, const BasicBlock *continue_target) {
+      BlockSet loop_blocks = GetLoopBlocks(header);
+      for (const BasicBlock *b : context_->cfg()->successors(header)) {
+        if (loop_blocks.count(b) == 0)
+          return b;
+      }
+
+      for (const BasicBlock *b : context_->cfg()->successors(continue_target)) {
+        if (loop_blocks.count(b) == 0)
+          return b;
+      }
+
+      return nullptr;
+  }
+
+  Construction* FindLoopConstruction(Construction *parent, const BasicBlock *, const BlockSet&, const BasicBlock *header) {
     std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(header);
     assert(back_edge_blocks.size() == 1 && "Only 1 back-edge is allowed.");
 
@@ -604,26 +688,27 @@ private:
     c->parent = parent;
     c->header = header;
     c->continue_target = *back_edge_blocks.begin();
-    processed_headers_.insert(c->header);
 
-    const BasicBlock *merge = FindImmediateCommonPostDominator(c->header, c->continue_target);
-    if (pdtree_.Dominates(exit, merge))
+    const BasicBlock *merge = FindLoopExit(c->header, c->continue_target);
+    //const BasicBlock *latest_exit = FindLatestExitDAG(header, exits);
+    //if (merge != nullptr && pdtree_.Dominates(latest_exit, merge))
+    if (merge != nullptr)
       c->merge = merge;
-    else {
+    else
       assert(0 && "Figure this out.");
-    }
 
     c->dump();
-    //c->children = FindChildConstructions(c, c->header, c->merge);
     std::unordered_set<const BasicBlock*> successors = context_->cfg()->successors(header);
     for (auto s : successors) {
-      auto children = FindChildConstructions(c, s, c->merge);
+      BlockSet children_exits = FindExits(s, c->merge);
+      children_exits.insert(c->merge);
+      auto children = FindChildConstructions(c, s, children_exits);
       c->children.insert(c->children.end(), children.cbegin(), children.cend());
     }
     return c;
   }
 
-  Construction* FindSelectionConstruction(Construction *parent, const BasicBlock *, const BasicBlock *exit, const BasicBlock *header) {
+  Construction* FindSelectionConstruction(Construction *parent, const BasicBlock *, const BlockSet& exits, const BasicBlock *header) {
     std::unordered_set<const BasicBlock*> back_edge_blocks = GetBackEdgeBlocks(header);
     std::unordered_set<const BasicBlock*> successors = context_->cfg()->successors(header);
     assert(back_edge_blocks.size() == 0);
@@ -633,7 +718,6 @@ private:
     c->parent = parent;
     c->header = header;
     c->continue_target = nullptr;
-    processed_headers_.insert(c->header);
 
     // Multiple cases for the branch:
     //  - both branches merge into a single node, the first common immediate pdom.
@@ -657,12 +741,36 @@ private:
       else
         std::cout << "  No common pdom." << std::endl;
 
-      if (merge != nullptr && merge != exit_merge && merge != exit_continue && pdtree_.StrictlyDominates(exit, merge)) {
+      const BasicBlock *latest_exit = FindLatestExitDAG(header, exits);
+      std::cout << " latest exit for the subgraph: " << latest_exit->id() << std::endl;
+
+      // This is the simplest case: There is a diverging select, which converges again before reaching the subgraph
+      // exit. The simplest form is the diamond shaped graph.
+      if (merge != nullptr && merge != exit_merge && merge != exit_continue && pdtree_.StrictlyDominates(latest_exit, merge)) {
         std::cout << "  selecting " << merge->id() << " because obvious selection merge node.";
         c->merge = merge;
         break;
       }
 
+      // This is a slight extension: the natural merge node is one of the exit nodes. This should normaly be disallowed
+      // as the exit node is outside of the subgraph. BUT if it's a return, it's a special edge case allowed by
+      // the SPIR-V spec. Hence we select this one.
+      if (merge == latest_exit && IsReturn(merge)) {
+        std::cout << "  selecting " << merge->id() << " because edge case: latest return is merge.";
+        c->merge = merge;
+        break;
+      }
+
+      // If one of the branch is an early return, merge on the other branch. This check should be done after the
+      // previous check: A->B B->C A->C, C is return. In such case, we shoud merge in C.
+      if (exits.count(lhs) != 0) {
+        c->merge = rhs;
+        break;
+      }
+      if (exits.count(rhs) != 0) {
+        c->merge = lhs;
+        break;
+      }
 
       // In the normal case, the merge node strictly dominates the exit node. But if the function early returns,
       // the function's return block could be the only 'valid' merge block.
@@ -696,14 +804,44 @@ private:
     c->dump();
 
     for (auto s : successors) {
-      auto children = FindChildConstructions(c, s, c->merge);
+      BlockSet children_exits = FindExits(s, c->merge);
+      children_exits.insert(c->merge);
+      auto children = FindChildConstructions(c, s, children_exits);
       c->children.insert(c->children.end(), children.cbegin(), children.cend());
     }
-    //c->children = FindChildConstructions(c, c->header, c->merge);
     return c;
   }
 
-  std::vector<Construction*> FindChildConstructions(Construction *parent, const BasicBlock *entry, const BasicBlock *exit) {
+  bool IsInSubgraph(const BasicBlock *query, const BasicBlock *entry, const BlockSet& exits) {
+    assert(query != nullptr && entry != nullptr);
+
+    BlockSet visited;
+    std::stack<const BasicBlock*> to_visit;
+    to_visit.push(entry);
+
+    while (to_visit.size() != 0) {
+      const BasicBlock *item = to_visit.top();
+      to_visit.pop();
+
+      if (visited.count(item) != 0)
+        continue;
+      visited.insert(item);
+
+      if (exits.count(item) != 0)
+        continue;
+
+      for (const BasicBlock *child : context_->cfg()->successors(item))
+        if (back_edges_.count({ item, child }) == 0)
+          to_visit.push(child);
+
+      if (item == query)
+        return true;
+    }
+
+    return false;
+  }
+
+  std::vector<Construction*> FindChildConstructions(Construction *parent, const BasicBlock *entry, const BlockSet& exits) {
     std::queue<const BasicBlock*> to_process;
     to_process.push(entry);
 
@@ -713,7 +851,10 @@ private:
     while (to_process.size() != 0) {
       const BasicBlock *item = to_process.front();
       to_process.pop();
-      std::cout << "{ entry=" << entry->id() << ", exit=" << exit->id() << ", item=" << item->id() << "}" << std::endl;
+      std::cout << "{ entry=" << entry->id() << ", exits=[";
+      for (const auto *b : exits)
+        std::cout << b->id() << ", ";
+      std::cout << "] item=" << item->id() << "}" << std::endl;
 
       // Handle loops for visitor.
       if (visited.count(item) != 0) {
@@ -723,8 +864,8 @@ private:
       visited.insert(item);
 
       // The reached block is outside of the parent construction. Ignoring.
-      if (!IsDAGOrdered(entry, item, exit) || item == exit) {
-      //if (!IsAfterDAGOrder(entry, item) || !IsAfterDAGOrder(item, exit)) {
+      if (!IsInSubgraph(item, entry, exits)) {
+      //if (!IsDAGOrdered(entry, item, latest_exit) || exits.count(item) != 0) {
         std::cout << " - not in range." << std::endl;
         continue;
       }
@@ -739,19 +880,13 @@ private:
         continue;
       }
 
-      //if (processed_headers_.count(item) != 0) {
-      //  std::cout << " - header already handled." << std::endl;
-      //  continue;
-      //}
-
       std::cout << "Figuring out construction for node " << item->id() << std::endl;
-
 
       Construction *construction = nullptr;
       if (IsLoopHeader(item)) {
-        construction = FindLoopConstruction(parent, entry, exit, item);
+        construction = FindLoopConstruction(parent, entry, exits, item);
       } else {
-        construction = FindSelectionConstruction(parent, entry, exit, item);
+        construction = FindSelectionConstruction(parent, entry, exits, item);
       }
       output.push_back(construction);
       to_process.push(construction->merge);

@@ -67,7 +67,7 @@ class CFG {
   BasicBlock* pseudo_exit_block() { return &pseudo_exit_block_; }
 
   // Return true if |block_ptr| is the pseudo-entry block.
-  bool IsPseudoEntryBlock(BasicBlock* block_ptr) const {
+  bool IsPseudoEntryBlock(const BasicBlock* block_ptr) const {
     return block_ptr == &pseudo_entry_block_;
   }
 
@@ -82,7 +82,7 @@ class CFG {
   //}
 
   // Return true if |block_ptr| is the pseudo-exit block.
-  bool IsPseudoExitBlock(BasicBlock* block_ptr) const {
+  bool IsPseudoExitBlock(const BasicBlock* block_ptr) const {
     return block_ptr == &pseudo_exit_block_;
   }
 
