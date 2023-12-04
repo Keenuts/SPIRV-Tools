@@ -27,6 +27,8 @@
 namespace spvtools {
 namespace opt {
 
+namespace {
+
 using BlockSet = std::unordered_set<const BasicBlock*>;
 
 struct Internal {
@@ -45,6 +47,8 @@ struct Internal {
     return Pass::Status::SuccessWithoutChange;
   }
 };
+
+} // anonymous namespace
 
 Pass::Status StructurizeMergeBackEdgePass::Process() {
   bool modified = false;

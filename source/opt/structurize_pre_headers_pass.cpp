@@ -27,6 +27,8 @@
 namespace spvtools {
 namespace opt {
 
+namespace {
+
 using BlockSet = std::unordered_set<const BasicBlock*>;
 
 struct Internal {
@@ -201,6 +203,8 @@ struct Internal {
     return Pass::Status::SuccessWithChange;
   }
 };
+
+} // anonymous namespace
 
 Pass::Status StructurizePreHeadersPass::Process() {
   bool modified = false;

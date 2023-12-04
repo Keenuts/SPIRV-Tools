@@ -27,6 +27,8 @@
 namespace spvtools {
 namespace opt {
 
+namespace {
+
 using BlockSet = std::unordered_set<const BasicBlock*>;
 
 struct Internal {
@@ -44,17 +46,20 @@ struct Internal {
     BlockSet successors;
   };
 
+  static bool IsConvergentInstruction(const Instruction& instruction) {
+    return instruction.opcode() == spv::Op::OpConvergenceEntry
+        || instruction.opcode() == spv::Op::OpConvergenceLoop
+        || instruction.opcode() == spv::Op::OpConvergenceAnchor;
+  }
+
   std::vector<Task> FindProblematicBlocks() {
     std::vector<Task> output;
 
     for (const BasicBlock& block : function_) {
       size_t convergence_operation_count = 0;
       for (const Instruction& instruction : block) {
-        if (instruction.opcode() == spv::Op::OpConvergenceEntry
-            || instruction.opcode() == spv::Op::OpConvergenceLoop
-            || instruction.opcode() == spv::Op::OpConvergenceAnchor) {
+        if (Internal::IsConvergentInstruction(instruction))
           ++convergence_operation_count;
-        }
 
         if (convergence_operation_count > 1) {
           output.push_back({ &block, context_->cfg()->successors(&block) });
@@ -66,13 +71,47 @@ struct Internal {
     return output;
   }
 
+  void FixBlock(const Task& task) {
+    BasicBlock *block = &*function_.FindBlock(task.block->id());
+
+    while (true) {
+      bool has_split = false;
+      size_t convergence_instruction_count = 0;
+
+      for (auto it = block->begin(); it != block->end(); ++it) {
+        if (Internal::IsConvergentInstruction(*it)) {
+          ++convergence_instruction_count;
+        }
+
+        if (convergence_instruction_count <= 1) {
+          continue;
+        }
+
+        BasicBlock *new_block = block->SplitBasicBlock(context_, context_->TakeNextId(), it);
+        InstructionBuilder builder(context_, block);
+        builder.AddBranch(new_block->id());
+        block = new_block;
+        has_split = true;
+        break;
+      }
+
+      if (!has_split)
+        break;
+    }
+  }
+
   Pass::Status Process() {
     std::vector<Task> tasks = FindProblematicBlocks();
+    if (tasks.size() == 0)
+      return Pass::Status::SuccessWithoutChange;
 
-    (void)tasks;
-    return Pass::Status::SuccessWithoutChange;
+    for (const Task& task : tasks)
+      FixBlock(task);
+    return Pass::Status::SuccessWithChange;
   }
 };
+
+} // anonymous namespace
 
 Pass::Status StructurizeSplitConvergentOperationPass::Process() {
   bool modified = false;
