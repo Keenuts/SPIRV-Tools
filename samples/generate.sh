@@ -33,7 +33,7 @@ for f in $(ls *.txtspv); do
   echo "Processing $f."
   basename="$(echo $f | cut -d '.' -f 1)"
 
-  spirv-as $f -o /tmp/base.o
+  spirv-as $f -o /tmp/base.o --preserve-numeric-ids
   spirv-cfg /tmp/base.o | dot -Tpng > "$basename.truth.png"
   spirv-opt --strip-headers --skip-validation /tmp/base.o -o /tmp/stripped.o
   cp /tmp/stripped.o "$basename.o"
