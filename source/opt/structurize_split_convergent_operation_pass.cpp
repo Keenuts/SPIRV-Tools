@@ -27,8 +27,63 @@
 namespace spvtools {
 namespace opt {
 
+using BlockSet = std::unordered_set<const BasicBlock*>;
+
+struct Internal {
+  IRContext *context_;
+  Function& function_;
+  DominatorTree dtree_;
+
+  Internal(IRContext *context, Function& function) : context_(context), function_(function), dtree_(/* postdominator= */ false) {
+    context_->InvalidateAnalysesExceptFor(IRContext::Analysis::kAnalysisNone);
+    dtree_.InitializeTree(*context_->cfg(), &function);
+  }
+
+  struct Task {
+    const BasicBlock *block;
+    BlockSet successors;
+  };
+
+  std::vector<Task> FindProblematicBlocks() {
+    std::vector<Task> output;
+
+    for (const BasicBlock& block : function_) {
+      size_t convergence_operation_count = 0;
+      for (const Instruction& instruction : block) {
+        if (instruction.opcode() == spv::Op::OpConvergenceEntry
+            || instruction.opcode() == spv::Op::OpConvergenceLoop
+            || instruction.opcode() == spv::Op::OpConvergenceAnchor) {
+          ++convergence_operation_count;
+        }
+
+        if (convergence_operation_count > 1) {
+          output.push_back({ &block, context_->cfg()->successors(&block) });
+          break;
+        }
+      }
+    }
+
+    return output;
+  }
+
+  Pass::Status Process() {
+    std::vector<Task> tasks = FindProblematicBlocks();
+
+    (void)tasks;
+    return Pass::Status::SuccessWithoutChange;
+  }
+};
+
 Pass::Status StructurizeSplitConvergentOperationPass::Process() {
-  return Status::SuccessWithoutChange;
+  bool modified = false;
+  for (auto& function : *context()->module()) {
+    Internal internal(context(), function);
+    Pass::Status status = internal.Process();
+    if (status == Status::SuccessWithChange)
+      modified = true;
+  }
+
+  return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
 }  // namespace opt

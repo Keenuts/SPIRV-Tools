@@ -78,6 +78,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   ir_loader.h
   licm_pass.h
   liveness.h
+  convergence_region.h
   local_access_chain_convert_pass.h
   local_redundancy_elimination.h
   local_single_block_elim_pass.h
@@ -209,6 +210,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   ir_loader.cpp
   licm_pass.cpp
   liveness.cpp
+  convergence_region.cpp
   local_access_chain_convert_pass.cpp
   local_redundancy_elimination.cpp
   local_single_block_elim_pass.cpp

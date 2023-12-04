@@ -84,6 +84,7 @@ add_spvtools_unittest(TARGET opt
        pass_manager_test.cpp
        pass_merge_return_test.cpp
        pass_structurize_pre_headers.cpp
+       pass_structurize_split_convergent_operation_test.cpp
        pass_remove_duplicates_test.cpp
        pass_utils.cpp
        private_to_local_test.cpp

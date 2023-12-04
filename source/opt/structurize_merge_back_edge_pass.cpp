@@ -27,8 +27,35 @@
 namespace spvtools {
 namespace opt {
 
+using BlockSet = std::unordered_set<const BasicBlock*>;
+
+struct Internal {
+  IRContext *context_;
+  Function& function_;
+  DominatorTree dtree_;
+
+  Internal(IRContext *context, Function& function) : context_(context), function_(function), dtree_(/* postdominator= */ false) {
+    context_->InvalidateAnalysesExceptFor(IRContext::Analysis::kAnalysisNone);
+    dtree_.InitializeTree(*context_->cfg(), &function);
+  }
+
+  Pass::Status Process() {
+    const BasicBlock *entry = &*function_.entry();
+    (void) entry;
+    return Pass::Status::SuccessWithoutChange;
+  }
+};
+
 Pass::Status StructurizeMergeBackEdgePass::Process() {
-  return Status::SuccessWithoutChange;
+  bool modified = false;
+  for (auto& function : *context()->module()) {
+    Internal internal(context(), function);
+    Pass::Status status = internal.Process();
+    if (status == Status::SuccessWithChange)
+      modified = true;
+  }
+
+  return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
 }  // namespace opt
