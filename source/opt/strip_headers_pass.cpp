@@ -40,6 +40,9 @@ Pass::Status StripHeadersPass::StripInstructions() {
     spv::Op::OpSwitch,
     spv::Op::OpTypeFunction,
     spv::Op::OpTypeVoid,
+    spv::Op::OpConvergenceEntry,
+    spv::Op::OpConvergenceLoop,
+    spv::Op::OpConvergenceAnchor,
   };
 
   context()->module()->ForEachInst(
