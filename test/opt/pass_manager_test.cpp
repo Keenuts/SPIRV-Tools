@@ -92,6 +92,32 @@ TEST(PassManager, InterfaceStructurize) {
   EXPECT_STREQ("structurize", manager.GetPass(0)->name());
 }
 
+TEST(PassManager, InterfaceStructurizePreHeaders) {
+  PassManager manager;
+  EXPECT_EQ(0u, manager.NumPasses());
+
+  manager.AddPass<StructurizePreHeadersPass>();
+  manager.AddPass<StructurizeSplitConvergentOperationPass>();
+  manager.AddPass<StructurizeMergeBackEdgePass>();
+  manager.AddPass<StructurizeMergeExitBlockPass>();
+  manager.AddPass<StructurizeIdentifyLoopsPass>();
+  manager.AddPass<StructurizeIdentifySelectionWithMergePass>();
+  manager.AddPass<StructurizeSplitHeaderBlocksPass>();
+  manager.AddPass<StructurizeIdentifySelectionWithoutMergePass>();
+  manager.AddPass<StructurizeSplitMultipleBreakPass>();
+
+  EXPECT_EQ(9u, manager.NumPasses());
+  EXPECT_STREQ("structurize-pre-headers",                      manager.GetPass(0)->name());
+  EXPECT_STREQ("structurize-split-convergent-operation",       manager.GetPass(1)->name());
+  EXPECT_STREQ("structurize-merge-back-edge",                  manager.GetPass(2)->name());
+  EXPECT_STREQ("structurize-merge-exit-block",                 manager.GetPass(3)->name());
+  EXPECT_STREQ("structurize-identify-loops",                   manager.GetPass(4)->name());
+  EXPECT_STREQ("structurize-identify-selection-with-merge",    manager.GetPass(5)->name());
+  EXPECT_STREQ("structurize-split-header-blocks",              manager.GetPass(6)->name());
+  EXPECT_STREQ("structurize-identify-selection-without-merge", manager.GetPass(7)->name());
+  EXPECT_STREQ("structurize-split-multiple-break",             manager.GetPass(8)->name());
+}
+
 // A pass that appends an OpNop instruction to the debug1 section.
 class AppendOpNopPass : public Pass {
  public:

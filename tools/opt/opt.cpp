@@ -502,6 +502,36 @@ Options (in lexicographical order):)",
   --structurize
                Converts a SPIR-V CFG into a structured CFG by adding merge instructions.)");
   printf(R"(
+  --structurize-pre-headers
+               Adds a pre-headers for loops if required.)");
+  printf(R"(
+  --structurize-pre-headers
+               Add a pre-headers for loops if required.)");
+  printf(R"(
+  --structurize-split-convergent-operation
+               Split blocks with conflicting convergent operations.)");
+  printf(R"(
+  --structurize-merge-back-edge
+               Merge backedges for loops with multiple backedges.)");
+  printf(R"(
+  --structurize-merge-exit-block
+               merge exit blocks of convergence regions with multiple exit blocks)");
+  printf(R"(
+  --structurize-identify-loops
+               identify loop constructs and adds headers.)");
+  printf(R"(
+  --structurize-identify-selection-with-merge
+               identify selection constructs with a merge node and adds headers.)");
+  printf(R"(
+  --structurize-split-header-blocks
+               split every block that is the header for multiple merge blocks.)");
+  printf(R"(
+  --structurize-identify-selection-without-merge
+               add selection construct to divergent blocks with no merge block.)");
+  printf(R"(
+  --structurize-split-multiple-break
+               split branches breaking out of multiple construct.)");
+  printf(R"(
   --switch-descriptorset=<from>:<to>
                Switch any DescriptoSet decorations using the value <from> to
                the new value <to>.)");

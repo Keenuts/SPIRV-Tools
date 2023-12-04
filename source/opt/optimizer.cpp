@@ -303,6 +303,24 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateStripHeadersPass());
   } else if (pass_name == "structurize") {
     RegisterPass(CreateStructurizePass());
+  } else if (pass_name == "structurize-pre-headers") {
+    RegisterPass(CreateStructurizePreHeadersPass());
+  } else if (pass_name == "structurize-split-convergent-operation") {
+    RegisterPass(CreateStructurizeSplitConvergentOperationPass());
+  } else if (pass_name == "structurize-merge-back-edge") {
+    RegisterPass(CreateStructurizeMergeBackEdgePass());
+  } else if (pass_name == "structurize-merge-exit-block") {
+    RegisterPass(CreateStructurizeMergeExitBlockPass());
+  } else if (pass_name == "structurize-identify-loops") {
+    RegisterPass(CreateStructurizeIdentifyLoopsPass());
+  } else if (pass_name == "structurize-identify-selection-with-merge") {
+    RegisterPass(CreateStructurizeIdentifySelectionWithMergePass());
+  } else if (pass_name == "structurize-split-header-blocks") {
+    RegisterPass(CreateStructurizeSplitHeaderBlocksPass());
+  } else if (pass_name == "structurize-identify-selection-without-merge") {
+    RegisterPass(CreateStructurizeIdentifySelectionWithoutMergePass());
+  } else if (pass_name == "structurize-split-multiple-break") {
+    RegisterPass(CreateStructurizeSplitMultipleBreakPass());
   } else if (pass_name == "strip-reflect") {
     RegisterPass(CreateStripReflectInfoPass());
   } else if (pass_name == "strip-nonsemantic") {
@@ -729,6 +747,51 @@ Optimizer::PassToken CreateStripHeadersPass() {
 Optimizer::PassToken CreateStructurizePass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::StructurizePass>());
+}
+
+Optimizer::PassToken CreateStructurizePreHeadersPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizePreHeadersPass>());
+}
+
+Optimizer::PassToken CreateStructurizeSplitConvergentOperationPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeSplitConvergentOperationPass>());
+}
+
+Optimizer::PassToken CreateStructurizeMergeBackEdgePass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeMergeBackEdgePass>());
+}
+
+Optimizer::PassToken CreateStructurizeMergeExitBlockPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeMergeExitBlockPass>());
+}
+
+Optimizer::PassToken CreateStructurizeIdentifyLoopsPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeIdentifyLoopsPass>());
+}
+
+Optimizer::PassToken CreateStructurizeIdentifySelectionWithMergePass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeIdentifySelectionWithMergePass>());
+}
+
+Optimizer::PassToken CreateStructurizeSplitHeaderBlocksPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeSplitHeaderBlocksPass>());
+}
+
+Optimizer::PassToken CreateStructurizeIdentifySelectionWithoutMergePass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeIdentifySelectionWithoutMergePass>());
+}
+
+Optimizer::PassToken CreateStructurizeSplitMultipleBreakPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StructurizeSplitMultipleBreakPass>());
 }
 
 Optimizer::PassToken CreateEliminateDeadFunctionsPass() {

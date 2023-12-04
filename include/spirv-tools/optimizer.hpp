@@ -253,6 +253,16 @@ Optimizer::PassToken CreateStripHeadersPass();
 
 Optimizer::PassToken CreateStructurizePass();
 
+Optimizer::PassToken CreateStructurizePreHeadersPass();
+Optimizer::PassToken CreateStructurizeSplitConvergentOperationPass();
+Optimizer::PassToken CreateStructurizeMergeBackEdgePass();
+Optimizer::PassToken CreateStructurizeMergeExitBlockPass();
+Optimizer::PassToken CreateStructurizeIdentifyLoopsPass();
+Optimizer::PassToken CreateStructurizeIdentifySelectionWithMergePass();
+Optimizer::PassToken CreateStructurizeSplitHeaderBlocksPass();
+Optimizer::PassToken CreateStructurizeIdentifySelectionWithoutMergePass();
+Optimizer::PassToken CreateStructurizeSplitMultipleBreakPass();
+
 // [Deprecated] This will create a strip-nonsemantic-info pass.  See below.
 Optimizer::PassToken CreateStripReflectInfoPass();
 
