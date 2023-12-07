@@ -28,6 +28,9 @@ namespace spvtools {
 namespace opt {
 
 Pass::Status StructurizeMergeExitBlockPass::Process() {
+  auto t = context()->get_convergence_region_mgr();
+  (void) t;
+  //context()
   return Status::SuccessWithoutChange;
 }
 

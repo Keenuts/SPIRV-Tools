@@ -49,7 +49,8 @@ struct Internal {
   static bool IsConvergentInstruction(const Instruction& instruction) {
     return instruction.opcode() == spv::Op::OpConvergenceEntry
         || instruction.opcode() == spv::Op::OpConvergenceLoop
-        || instruction.opcode() == spv::Op::OpConvergenceAnchor;
+        || instruction.opcode() == spv::Op::OpConvergenceAnchor
+        || instruction.opcode() == spv::Op::OpConvergenceControl;
   }
 
   std::vector<Task> FindProblematicBlocks() {

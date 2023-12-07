@@ -43,6 +43,7 @@
 #include "source/opt/scalar_analysis.h"
 #include "source/opt/struct_cfg_analysis.h"
 #include "source/opt/convergence_region.h"
+#include "source/opt/loop_identify.h"
 #include "source/opt/type_manager.h"
 #include "source/opt/value_number_table.h"
 #include "source/util/make_unique.h"
@@ -86,6 +87,7 @@ class IRContext {
     kAnalysisDebugInfo = 1 << 16,
     kAnalysisLiveness = 1 << 17,
     kAnalysisConvergenceRegion = 1 << 18,
+    kAnalysisLoopIdentify = 1 << 19,
     kAnalysisEnd = 1 << 17
   };
 
@@ -277,13 +279,18 @@ class IRContext {
     return liveness_mgr_.get();
   }
 
-  // Returns a pointer to a liveness manager.  If the liveness manager is
-  // invalid, it is rebuilt first.
   analysis::ConvergenceRegionManager* get_convergence_region_mgr() {
     if (!AreAnalysesValid(kAnalysisConvergenceRegion)) {
       BuildConvergenceRegionManager();
     }
     return convergence_region_mgr_.get();
+  }
+
+  analysis::LoopManager* get_loop_mgr() {
+    if (!AreAnalysesValid(kAnalysisLoopIdentify)) {
+      BuildLoopManager();
+    }
+    return loop_mgr_.get();
   }
 
   // Returns a pointer to a value number table.  If the liveness analysis is
@@ -710,6 +717,11 @@ class IRContext {
     valid_analyses_ = valid_analyses_ | kAnalysisConvergenceRegion;
   }
 
+  void BuildLoopManager() {
+    loop_mgr_ = MakeUnique<analysis::LoopManager>(this);
+    valid_analyses_ = valid_analyses_ | kAnalysisLoopIdentify;
+  }
+
   // Builds the instruction-block map for the whole module.
   void BuildInstrToBlockMapping() {
     instr_to_block_.clear();
@@ -935,6 +947,8 @@ class IRContext {
   std::unique_ptr<analysis::LivenessManager> liveness_mgr_;
 
   std::unique_ptr<analysis::ConvergenceRegionManager> convergence_region_mgr_;
+
+  std::unique_ptr<analysis::LoopManager> loop_mgr_;
 
   // The maximum legal value for the id bound.
   uint32_t max_id_bound_;

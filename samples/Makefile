@@ -6,6 +6,7 @@
 
 %.truth.o: %.txtspv
 	spirv-as $^ -o $@
+
 %.truth.png: %.truth.o
 	spirv-cfg $^ -o - | dot -Tpng > $@
 

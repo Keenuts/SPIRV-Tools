@@ -1,0 +1,36 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Google spiregg; 0
+; Bound: 24
+; Schema: 0
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "main"
+               OpExecutionMode %1 LocalSize 1 1 1
+       %void = OpTypeVoid
+          %5 = OpTypeFunction %void
+       %bool = OpTypeBool
+      %false = OpConstantFalse %bool
+       %uint = OpTypeInt 32 0
+     %uint_0 = OpConstant %uint 0
+          %1 = OpFunction %void None %5
+          %6 = OpLabel
+               OpReturn
+               OpFunctionEnd
+          %8 = OpFunction %void None %5
+          %9 = OpLabel
+               OpBranch %12
+         %12 = OpLabel
+          %7 = OpConvergenceEntry
+               OpBranchConditional %false %16 %14
+         %16 = OpLabel
+               OpBranchConditional %false %19 %18
+         %19 = OpLabel
+               OpReturn
+         %18 = OpLabel
+               OpBranch %15
+         %15 = OpLabel
+               OpBranch %12
+         %14 = OpLabel
+               OpReturn
+               OpFunctionEnd

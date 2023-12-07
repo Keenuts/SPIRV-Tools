@@ -18,7 +18,11 @@
 
 #include <cstdint>
 #include <unordered_set>
+#include <utility>
+#include <functional>
 #include "source/opt/basic_block.h"
+#include "source/opt/dominator_analysis.h"
+#include "source/opt/loop_identify.h"
 #include "source/opt/cfg.h"
 
 namespace spvtools {
@@ -29,53 +33,42 @@ class Instruction;
 
 namespace analysis {
 
-struct Region;
-
-namespace {
-  using BlockSet = std::unordered_set<const BasicBlock*>;
-  using RegionSet = std::unordered_set<std::unique_ptr<Region>>;
-} // namespace
-
-struct Region {
-
-  // The entry and exit nodes to this region.
-  const BasicBlock *entry;
-  const BasicBlock *exit;
-
-  // All the nodes in this region, including subregion nodes, and entry/exit nodes.
-  BlockSet nodes;
-
-  // Regions contained inside this region.
-  RegionSet subregions;
-
-  Region(const BasicBlock *entry, const BasicBlock *exit, BlockSet nodes, RegionSet&& subregions)
-    : entry(entry), exit(exit), nodes(nodes), subregions(std::move(subregions))
-  {
-    assert(nodes.count(entry) != 0 && nodes.count(exit) != 0);
-    for (const auto& subregion : subregions)
-      for (const BasicBlock *node : subregion->nodes)
-        assert(nodes.count(node) != 0);
-  }
-
-  Region(const BasicBlock *entry, const BasicBlock *exit)
-    : entry(entry), exit(exit) {
-      nodes.insert(entry);
-      nodes.insert(exit);
-  }
-
-};
-
 class ConvergenceRegionManager {
-  IRContext *context_;
-  RegionSet regions_;
-
- public:
+public:
   ConvergenceRegionManager(IRContext* ctx);
 
-  const RegionSet& GetRegions() const {
-    (void) context_;
-    return regions_;
+  bool HasToken(const BasicBlock* block) const {
+    return block_to_token_.count(block) != 0;
   }
+
+  uint32_t GetToken(const BasicBlock* block) const {
+    assert(HasToken(block));
+    return block_to_token_.at(block);
+  }
+#if 0
+  const LoopManager::BlockSet& GetBlocks(const Instruction* token) const {
+    static LoopManager::BlockSet empty_set;
+    if (token_to_blocks_.count(token) != 0)
+      return token_to_blocks_[token];
+    return empty_set;
+  }
+#endif
+
+private:
+
+  LoopManager::BlockSet FindPathsToMatch(const LoopManager::EdgeSet& back_edges,
+                                         const BasicBlock *node,
+                                         std::function<bool(const BasicBlock*)> isMatch) const;
+
+  void IdentifyConvergenceRegions(const opt::Function& function);
+
+private:
+
+  IRContext *context_;
+  DominatorTree dtree_;
+
+  std::unordered_map<const BasicBlock*, uint32_t> block_to_token_;
+  //std::unordered_map<const Instruction*, LoopManager::BlockSet> token_to_blocks_;
 };
 
 }  // namespace analysis

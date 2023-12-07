@@ -227,13 +227,24 @@ BasicBlock* Function::InsertBasicBlockBefore(
 bool Function::HasEarlyReturn() const {
   auto post_dominator_analysis =
       blocks_.front()->GetLabel()->context()->GetPostDominatorAnalysis(this);
-  for (auto& block : blocks_) {
-    if (spvOpcodeIsReturn(block->tail()->opcode()) &&
-        !post_dominator_analysis->Dominates(block.get(), entry().get())) {
+  std::unordered_set<const BasicBlock*> exits = GetReturnBlocks();
+  for (const BasicBlock *block : exits) {
+    if (!post_dominator_analysis->Dominates(block, entry().get())) {
       return true;
     }
   }
   return false;
+}
+
+std::unordered_set<const BasicBlock*> Function::GetReturnBlocks() const {
+  std::unordered_set<const BasicBlock*> output;
+  for (auto& block : blocks_) {
+    if (spvOpcodeIsReturn(block->tail()->opcode())) {
+      output.insert(block.get());
+    }
+  }
+
+  return output;
 }
 
 bool Function::IsRecursive() const {

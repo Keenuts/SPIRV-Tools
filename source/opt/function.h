@@ -165,6 +165,8 @@ class Function {
   // Returns true if the function has a return block other than the exit block.
   bool HasEarlyReturn() const;
 
+  std::unordered_set<const BasicBlock*> GetReturnBlocks() const;
+
   // Returns true if the function calls itself either directly or indirectly.
   bool IsRecursive() const;
 

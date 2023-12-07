@@ -43,6 +43,7 @@ Pass::Status StripHeadersPass::StripInstructions() {
     spv::Op::OpConvergenceEntry,
     spv::Op::OpConvergenceLoop,
     spv::Op::OpConvergenceAnchor,
+    spv::Op::OpConvergenceControl,
   };
 
   context()->module()->ForEachInst(
