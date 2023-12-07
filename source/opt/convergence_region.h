@@ -35,6 +35,18 @@ namespace analysis {
 
 class ConvergenceRegionManager {
 public:
+  struct Region {
+    uint32_t token;
+    // Blocks belonging to this region. Includes nodes in subregions.
+    LoopManager::BlockSet nodes;
+
+    // Blocks exiting to the parent region.
+    LoopManager::BlockSet exits;
+
+    // Child regions contained in this region, and thus only accessible from this region.
+    std::vector<Region*> children;
+  };
+
   ConvergenceRegionManager(IRContext* ctx);
 
   bool HasToken(const BasicBlock* block) const {
@@ -44,6 +56,10 @@ public:
   uint32_t GetToken(const BasicBlock* block) const {
     assert(HasToken(block));
     return block_to_token_.at(block);
+  }
+
+  const std::vector<const Region*>& GetConvergenceRegions() const {
+    return top_level_regions_;
   }
 #if 0
   const LoopManager::BlockSet& GetBlocks(const Instruction* token) const {
@@ -62,12 +78,19 @@ private:
 
   void IdentifyConvergenceRegions(const opt::Function& function);
 
+  void CreateRegionHierarchy(const opt::Function& function);
+  void CreateRegionHierarchy(Region *parent, const LoopManager::LoopInfo& loop);
+
 private:
 
   IRContext *context_;
   DominatorTree dtree_;
 
+  std::vector<Region*> regions_;
+  std::vector<const Region*> top_level_regions_;
+
   std::unordered_map<const BasicBlock*, uint32_t> block_to_token_;
+  std::unordered_map<uint32_t, const Region*> token_to_region_;
   //std::unordered_map<const Instruction*, LoopManager::BlockSet> token_to_blocks_;
 };
 

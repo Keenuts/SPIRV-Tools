@@ -77,6 +77,28 @@ void DumpLoop(const LoopInfo& loop, size_t indent_level = 0) {
   std::cout << indent << "}" << std::endl;
 }
 
+void DumpRegion(const ConvergenceRegionManager::Region *region, size_t indent_level = 0) {
+  std::string indent(indent_level, '\t');
+  std::cout << indent << "{" << std::endl;
+  std::cout << indent << "\ttoken: " << region->token << std::endl;
+
+  std::cout << indent << "\tnodes: { ";
+  for (const BasicBlock *node : region->nodes)
+    std::cout << node->id() << ", ";
+  std::cout << "}" << std::endl;
+
+  std::cout << indent << "\texits: { ";
+  for (const BasicBlock *node : region->exits)
+    std::cout << node->id() << ", ";
+  std::cout << "}" << std::endl;
+
+  std::cout << indent << "\tsubregions: { " << std::endl;
+  for (const auto *child : region->children)
+    DumpRegion(child, indent_level + 1);
+  std::cout << indent << "\t}" << std::endl;
+  std::cout << indent << " }" << std::endl;
+}
+
 } // anonymous namespace
 
 BlockSet ConvergenceRegionManager::FindPathsToMatch(const EdgeSet& back_edges,
@@ -141,11 +163,86 @@ void ConvergenceRegionManager::IdentifyConvergenceRegions(const opt::Function& f
   }
 }
 
+#if 0
+LoopInfo FindOuttermostLoopWithNodes(const BlockSet& blocks) {
+  for (
+  const LoopInfo* best;
+  const size_t matching_nodes = 0;
+
+  std::queue<const LoopInfo *> to_process;
+}
+#endif
+
+void ConvergenceRegionManager::CreateRegionHierarchy(Region *parent, const LoopInfo& loop) {
+  auto convergence_instruction = GetConvergenceInstruction(loop.header);
+  if (convergence_instruction == nullptr) {
+    for (const auto& child : loop.children)
+      CreateRegionHierarchy(parent, child);
+    return;
+  }
+
+  Region *region = new Region();
+  regions_.push_back(region);
+
+  region->token = GetConvergenceToken(convergence_instruction);
+  region->nodes = loop.nodes;
+  region->exits = loop.exits;
+  parent->children.push_back(region);
+  assert(token_to_region_.count(region->token) == 0);
+  token_to_region_.emplace(region->token, region);
+
+  for (const auto& child : loop.children)
+    CreateRegionHierarchy(region, child);
+}
+
+void ConvergenceRegionManager::CreateRegionHierarchy(const opt::Function& function) {
+  auto loops = context_->get_loop_mgr()->GetLoops(&function);
+  Region fake_region;
+  for (const auto& loop : loops) {
+    CreateRegionHierarchy(&fake_region, loop);
+  }
+
+  for (const Region* region : fake_region.children) {
+    top_level_regions_.push_back(region);
+  }
+
+  for (const auto& [block, token] : block_to_token_) {
+    assert(token_to_region_.count(token) != 0);
+    assert(token_to_region_[token]->nodes.count(block) != 0);
+  }
+
+#if 0
+  std::unordered_map<uint32_t, BlockSet> token_to_blocks;
+  for (const auto& [block, token] : block_to_token_) {
+    if (token_to_blocks_.count(token) == 0)
+      token_to_blocks_.insert({ token, {} });
+    token_to_blocks_[token].insert(block);
+  }
+
+  std::queue<LoopInfo> to_process;
+  for (const auto& loop : context_->get_loop_mgr()->GetLoops(&function))
+    to_process.push(loop);
+
+  while (to_process.size() != 0) {
+    const LoopInfo loop = to_process.front();
+    to_process.pop();
+
+    for (const auto& child : loop.children)
+      to_process.push(child);
+  }
+#endif
+}
+
 ConvergenceRegionManager::ConvergenceRegionManager(IRContext* context)
   : context_(context), dtree_(/* postdominator= */ false)  {
   for (const opt::Function& function : *context->module()) {
     dtree_.InitializeTree(*context_->cfg(), &function);
     IdentifyConvergenceRegions(function);
+    CreateRegionHierarchy(function);
+
+    std::cout << "Regions:" << std::endl;
+    for (const Region* region : top_level_regions_)
+      DumpRegion(region);
 
     for (const auto& [block, token] : block_to_token_) {
       std::cout << " - block " << block->id() << ", token=" << token << std::endl;
