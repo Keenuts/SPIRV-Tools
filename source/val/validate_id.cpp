@@ -175,7 +175,12 @@ spv_result_t IdPass(ValidationState_t& _, Instruction* inst) {
           } else if (def->type_id() == 0 && !spvOpcodeGeneratesType(opcode) &&
                      !spvOpcodeIsDebug(opcode) && !inst->IsDebugInfo() &&
                      !inst->IsNonSemantic() && !spvOpcodeIsDecoration(opcode) &&
-                     !spvOpcodeIsBranch(opcode) && opcode != spv::Op::OpPhi &&
+                     !spvOpcodeIsBranch(opcode) &&
+                     opcode != spv::Op::OpPhi &&
+                     opcode != spv::Op::OpConvergenceEntry &&
+                     opcode != spv::Op::OpConvergenceLoop &&
+                     opcode != spv::Op::OpConvergenceControl &&
+                     opcode != spv::Op::OpConvergenceAnchor &&
                      opcode != spv::Op::OpExtInst &&
                      opcode != spv::Op::OpExtInstImport &&
                      opcode != spv::Op::OpSelectionMerge &&
