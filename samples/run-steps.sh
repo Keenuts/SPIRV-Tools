@@ -28,9 +28,12 @@ echo 'Running structurize-merge-exit-block.'
 spirv-opt /tmp/step_3 -o /tmp/step_4 --structurize-merge-exit-block --skip-validation
 echo 'Running structurize-identify-loops.'
 spirv-opt /tmp/step_4 -o /tmp/step_5 --structurize-identify-loops --skip-validation
+echo 'Running structurize-identify-selection-with-merge.'
+spirv-opt /tmp/step_5 -o /tmp/step_6 --structurize-identify-selection-with-merge --skip-validation
 
 spirv-cfg /tmp/step_1 -o - | dot -Tpng > /tmp/step_1.png
 spirv-cfg /tmp/step_2 -o - | dot -Tpng > /tmp/step_2.png
 spirv-cfg /tmp/step_3 -o - | dot -Tpng > /tmp/step_3.png
 spirv-cfg /tmp/step_4 -o - | dot -Tpng > /tmp/step_4.png
 spirv-cfg /tmp/step_5 -o - | dot -Tpng > /tmp/step_5.png
+spirv-cfg /tmp/step_6 -o - | dot -Tpng > /tmp/step_6.png
