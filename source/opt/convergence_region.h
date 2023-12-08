@@ -37,6 +37,8 @@ class ConvergenceRegionManager {
 public:
   struct Region {
     uint32_t token;
+    const BasicBlock *entry;
+
     // Blocks belonging to this region. Includes nodes in subregions.
     LoopManager::BlockSet nodes;
 

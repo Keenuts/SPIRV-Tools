@@ -184,6 +184,7 @@ void ConvergenceRegionManager::CreateRegionHierarchy(Region *parent, const LoopI
   Region *region = new Region();
   regions_.push_back(region);
 
+  region->entry = loop.header;
   region->token = GetConvergenceToken(convergence_instruction);
   region->nodes = loop.nodes;
   region->exits = loop.exits;
