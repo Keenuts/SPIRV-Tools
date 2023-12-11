@@ -54,6 +54,15 @@ struct Internal {
       : target(target), merge_target(merge_target), continue_target(continue_target) { }
   };
 
+  bool HasBackEdge(const BasicBlock *block) {
+    EdgeSet back_edges = context_->get_loop_mgr()->GetBackEdges(&function_);
+    for (const auto& [src, dst] : back_edges) {
+      if (dst == block)
+        return true;
+    }
+    return false;
+  }
+
   Pass::Status Process() {
     //EdgeSet back_edges = context_->get_loop_mgr()->GetCon(&function_);
     EdgeSet back_edges = context_->get_loop_mgr()->GetBackEdges(&function_);
@@ -68,8 +77,15 @@ struct Internal {
     while (to_process.size() != 0) {
       const Region *region = to_process.front();
       to_process.pop();
+      for (const Region *child : region->children) {
+        to_process.push(child);
+      }
 
       std::cout << "Region: header: " << region->entry->id() << std::endl;
+      if (!HasBackEdge(region->entry)) {
+        // Not a loop, can skip.
+        continue;
+      }
       assert(region->exits.size() == 1);
 
       BasicBlock *block = context_->cfg()->block(region->entry->id());
@@ -82,12 +98,7 @@ struct Internal {
       }
       assert(continue_target != nullptr);
 
-
       tasks.emplace_back(block, *region->exits.begin(), continue_target);
-
-      for (const Region *child : region->children) {
-        to_process.push(child);
-      }
     }
 
     for (const auto& task : tasks) {

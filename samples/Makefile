@@ -2,7 +2,7 @@
 .PHONY: clean help %
 
 %.truth.o: %.hlsl
-	dxc -T cs_6_0 -E main -fcgl -spirv $^ -Fo $@
+	dxc -T cs_6_0 -E main -fcgl -Vd -spirv $^ -Fo $@
 
 %.truth.o: %.txtspv
 	spirv-as $^ -o $@

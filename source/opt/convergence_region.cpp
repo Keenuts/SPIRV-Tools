@@ -246,14 +246,24 @@ void ConvergenceRegionManager::IdentifyConvergenceRegions(const opt::Function& f
     loop_to_region.emplace(loop.header, std::move(info));
   }
 
-  Region fake_region;
+  //Region fake_region;
+  Region *top_level_region = new Region();
+  top_level_region->token = 0;
+  top_level_region->entry = function.entry().get();
   for (const auto& loop : loops)
-    CreateRegionHierarchy(&fake_region, loop, loop_to_region);
-  for (Region *region : fake_region.children)
+    CreateRegionHierarchy(top_level_region, loop, loop_to_region);
+  for (Region *region : top_level_region->children)
     PurgeExitNodes(region);
 
-  std::vector<const Region*> top_level_regions(fake_region.children.begin(),
-                                               fake_region.children.end());
+  for (const Region *child : top_level_region->children)
+    top_level_region->exits.insert(child->exits.cbegin(), child->exits.cend());
+  for (const BasicBlock& block : function)
+    top_level_region->nodes.insert(&block);
+
+  //std::vector<const Region*> top_level_regions(fake_region.children.begin(),
+  //                                             fake_region.children.end());
+  std::vector<const Region*> top_level_regions;
+  top_level_regions.push_back(top_level_region);
   top_level_regions_.emplace(&function, std::move(top_level_regions));
 }
 
