@@ -48,7 +48,7 @@ struct Internal {
 
 #if 0
   const Region* GetRegionForNode(const BasicBlock *block) {
-    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions();
+    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions(function_);
 
     std::queue<const Region*> to_process;
     for (const Region *r : regions)
@@ -154,7 +154,7 @@ struct Internal {
 
   Pass::Status Process() {
     EdgeSet back_edges = context_->get_loop_mgr()->GetBackEdges(&function_);
-    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions();
+    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions(&function_);
     auto dom_analysis = context_->GetDominatorAnalysis(&function_);
 
     std::vector<Task> tasks;

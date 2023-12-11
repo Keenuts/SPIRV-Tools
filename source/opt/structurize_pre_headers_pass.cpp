@@ -167,7 +167,6 @@ struct Internal {
 
     // Now, we can patch the module.
     for (const auto& item : to_process) {
-
       const uint32_t new_block_id = context_->TakeNextId();
       std::unique_ptr<Instruction> label_inst(
           new Instruction(context_, spv::Op::OpLabel, 0, new_block_id, {}));
@@ -188,6 +187,8 @@ struct Internal {
           FixConditionalBranch(block, item.header, new_block);
         }
       }
+
+      std::cout << " - creating new pre-header to " << item.header->id() << ": new block " << new_block_id << std::endl;
     }
   }
 

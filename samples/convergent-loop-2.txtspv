@@ -22,14 +22,14 @@
          %49 = OpConvergenceAnchor
                OpBranch %12
          %12 = OpLabel
-         %50 = OpConvergenceLoop %49
+         %50 = OpConvergenceLoop
                OpBranchConditional %false %16 %14
          %16 = OpLabel
                OpBranchConditional %false %19 %20
          %19 = OpLabel
                OpBranch %21
          %21 = OpLabel
-         %51 = OpConvergenceLoop %50
+         %51 = OpConvergenceLoop
                OpBranchConditional %false %25 %23
          %25 = OpLabel
                OpBranchConditional %false %28 %27

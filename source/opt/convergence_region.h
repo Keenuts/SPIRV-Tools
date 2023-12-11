@@ -60,17 +60,10 @@ public:
     return block_to_token_.at(block);
   }
 
-  const std::vector<const Region*>& GetConvergenceRegions() const {
-    return top_level_regions_;
+  const std::vector<const Region*>& GetConvergenceRegions(const opt::Function *function) const {
+    assert(top_level_regions_.count(function) == 1);
+    return top_level_regions_.at(function);
   }
-#if 0
-  const LoopManager::BlockSet& GetBlocks(const Instruction* token) const {
-    static LoopManager::BlockSet empty_set;
-    if (token_to_blocks_.count(token) != 0)
-      return token_to_blocks_[token];
-    return empty_set;
-  }
-#endif
 
 private:
 
@@ -80,8 +73,8 @@ private:
 
   void IdentifyConvergenceRegions(const opt::Function& function);
 
-  void CreateRegionHierarchy(const opt::Function& function);
-  void CreateRegionHierarchy(Region *parent, const LoopManager::LoopInfo& loop);
+  //void CreateRegionHierarchy(const opt::Function& function);
+  //void CreateRegionHierarchy(Region *parent, const LoopManager::LoopInfo& loop);
 
 private:
 
@@ -89,11 +82,10 @@ private:
   DominatorTree dtree_;
 
   std::vector<Region*> regions_;
-  std::vector<const Region*> top_level_regions_;
+  std::unordered_map<const opt::Function*, std::vector<const Region*>> top_level_regions_;
 
   std::unordered_map<const BasicBlock*, uint32_t> block_to_token_;
   std::unordered_map<uint32_t, const Region*> token_to_region_;
-  //std::unordered_map<const Instruction*, LoopManager::BlockSet> token_to_blocks_;
 };
 
 }  // namespace analysis

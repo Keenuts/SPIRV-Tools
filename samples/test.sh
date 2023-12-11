@@ -16,12 +16,14 @@
 
 set -e
 
-for f in $(ls *.o); do
+for f in $(ls convergent-*.o); do
   echo "Testing $f."
   basename="$(echo $f | cut -d '.' -f 1)"
 
-  #spirv-opt --structurize --skip-validation $f -o /tmp/$basename.scfg.o > /dev/null
-  ./run-steps.sh $f $basename.scfg.o
+  rm -f /tmp/$basename.scfg.o
+  rm -f /tmp/$basename.scfg.png
+
+  ./run-steps.sh $f /tmp/$basename.scfg.o
   spirv-cfg /tmp/$basename.scfg.o | dot -Tpng > "/tmp/$basename.scfg.png"
   spirv-val /tmp/$basename.scfg.o
 done
