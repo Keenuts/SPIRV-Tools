@@ -64,6 +64,17 @@ struct Internal {
     return nullptr;
   }
 
+  const BasicBlock* GetContinueBlock(const BasicBlock *block) {
+    for (const Instruction& i : *block) {
+      if (i.opcode() != spv::Op::OpLoopMerge) {
+        continue;
+      }
+
+      return context_->cfg()->block(i.GetSingleWordInOperand(1));
+    }
+    return nullptr;
+  }
+
   bool IsSelectionHeader(const BasicBlock *block) {
     for (const Instruction& i : *block) {
       if (i.opcode() == spv::Op::OpSelectionMerge || i.opcode() == spv::Op::OpLoopMerge) {
@@ -75,6 +86,8 @@ struct Internal {
 
   Pass::Status Process() {
     BlockSet merge_blocks;
+    BlockSet continue_blocks;
+
     for (const BasicBlock& block : function_) {
       if (!IsSelectionHeader(&block))
         continue;
@@ -82,6 +95,10 @@ struct Internal {
       const BasicBlock *merge_block = GetMergeBlock(&block);
       assert(merge_block != nullptr);
       merge_blocks.insert(merge_block);
+
+      const BasicBlock *continue_block = GetContinueBlock(&block);
+      if (continue_block != nullptr)
+        continue_blocks.insert(continue_block);
     }
 
     std::vector<Task> tasks;
@@ -97,11 +114,19 @@ struct Internal {
       for (const BasicBlock *blk : successors) {
         if (merge_blocks.count(blk) != 0)
           continue;
+        if (continue_blocks.count(blk) != 0)
+          continue;
         merge = blk;
         break;
       }
-      assert(merge != nullptr);
 
+      if (merge == nullptr) {
+        std::cout << "Not adding selection header for divergent block " << block.id()
+                  << ": both successors are either merge or continue blocks." << std::endl;
+        continue;
+      }
+
+      assert(merge != nullptr);
       BasicBlock *header = context_->cfg()->block(block.id());
       tasks.emplace_back(header, merge);
     }
