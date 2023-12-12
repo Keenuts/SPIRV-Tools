@@ -45,9 +45,47 @@ struct Internal {
     dtree_.InitializeTree(*context_->cfg(), &function);
   }
 
+  const Instruction* GetConvergenceInstruction(const BasicBlock *block) {
+    for (const auto& instruction : *block) {
+      if (instruction.opcode() == spv::Op::OpConvergenceEntry
+       || instruction.opcode() == spv::Op::OpConvergenceLoop
+       || instruction.opcode() == spv::Op::OpConvergenceAnchor
+       || instruction.opcode() == spv::Op::OpConvergenceControl) {
+        return &instruction;
+      }
+    }
+
+    return nullptr;
+  }
+
+  bool HasConvergenceOperation(const BasicBlock *block) {
+    return GetConvergenceInstruction(block) != nullptr;
+  }
+
+  uint32_t GetConvergenceToken(const BasicBlock *block) {
+    for (const auto& instruction : *block) {
+      if (instruction.opcode() == spv::Op::OpConvergenceEntry
+       || instruction.opcode() == spv::Op::OpConvergenceLoop
+       || instruction.opcode() == spv::Op::OpConvergenceAnchor) {
+        return instruction.result_id();
+      }
+
+      if (instruction.opcode() == spv::Op::OpConvergenceControl) {
+        return instruction.GetSingleWordInOperand(0);
+      }
+    }
+    assert(0 && "bad call");
+    return 0;
+  }
+
   void DumpDot() {
     std::cout << "digraph {" << std::endl;
     for (const BasicBlock& block : function_) {
+      if (HasConvergenceOperation(&block)) {
+        std::cout << "    " << block.id()
+                  << " [label=\"" << block.id() << " (" << GetConvergenceToken(&block) << ")\"];"
+                  << std::endl;
+      }
       const auto& successors = context_->cfg()->successors(&block);
       for (const BasicBlock* successor : successors)
         std::cout << "    " << block.id() << " -> " << successor->id() << std::endl;
@@ -190,11 +228,8 @@ struct Internal {
   }
 
   bool ProcessPass() {
-    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions(&function_);
     std::queue<const Region*> to_process;
-    for (const Region *region : regions) {
-      to_process.push(region);
-    }
+    to_process.push(context_->get_convergence_region_mgr()->GetConvergenceRegions(&function_));
 
     while (to_process.size() != 0) {
       const Region *region = to_process.front();
@@ -204,7 +239,7 @@ struct Internal {
         to_process.push(child);
       }
 
-      if (region->exits.size() <= 1)
+      if (region->exits.size() <= 1 || region->parent == nullptr)
         continue;
 
       std::unordered_map<const BasicBlock*, BasicBlock*> const_to_rw;
@@ -239,7 +274,7 @@ struct Internal {
   Pass::Status Process() {
     bool modified = false;
     while (ProcessPass()) {
-      //DumpDot();
+      DumpDot();
       modified = true;
     }
     return modified ? Pass::Status::SuccessWithChange : Pass::Status::SuccessWithoutChange;

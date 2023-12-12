@@ -66,11 +66,8 @@ struct Internal {
   Pass::Status Process() {
     //EdgeSet back_edges = context_->get_loop_mgr()->GetCon(&function_);
     EdgeSet back_edges = context_->get_loop_mgr()->GetBackEdges(&function_);
-    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions(&function_);
     std::queue<const Region*> to_process;
-    for (const Region *region : regions) {
-      to_process.push(region);
-    }
+    to_process.push(context_->get_convergence_region_mgr()->GetConvergenceRegions(&function_));
 
     std::vector<Task> tasks;
 

@@ -72,6 +72,8 @@ class DotConverter {
   // otherwise.
   uint32_t continue_target_ = 0;
 
+  uint32_t current_token_ = 0;
+
   // An object for mapping Ids to names.
   spvtools::NameMapper name_mapper_;
 
@@ -108,6 +110,16 @@ spv_result_t DotConverter::HandleInstruction(
       FlushBlock(successors);
     } break;
 
+    case spv::Op::OpConvergenceEntry:
+    case spv::Op::OpConvergenceLoop:
+    case spv::Op::OpConvergenceAnchor:
+      current_token_ = inst.result_id;
+      break;
+
+    case spv::Op::OpConvergenceControl:
+      current_token_ = inst.words[1];
+      break;
+
     case spv::Op::OpKill:
     case spv::Op::OpReturn:
     case spv::Op::OpUnreachable:
@@ -134,7 +146,11 @@ void DotConverter::FlushBlock(const std::vector<uint32_t>& successors) {
     out_ << " [label=\"" << name_mapper_(current_block_id_) << "\nFn "
          << name_mapper_(current_function_id_) << " entry\", shape=box];\n";
   } else {
-    out_ << " [label=\"" << name_mapper_(current_block_id_) << "\"];\n";
+    if (current_token_ != 0) {
+      out_ << " [label=\"" << name_mapper_(current_block_id_) << " (" << current_token_ << ")\"];\n";
+    } else {
+      out_ << " [label=\"" << name_mapper_(current_block_id_) << "\"];\n";
+    }
   }
 
   for (auto successor : successors) {
@@ -154,6 +170,7 @@ void DotConverter::FlushBlock(const std::vector<uint32_t>& successors) {
   seen_function_entry_block_ = true;
   merge_ = 0;
   continue_target_ = 0;
+  current_token_ = 0;
 }
 
 spv_result_t HandleInstruction(

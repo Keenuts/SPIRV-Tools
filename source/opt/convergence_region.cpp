@@ -157,6 +157,7 @@ void CreateRegionHierarchy(Region *parent, const LoopInfo& loop, const std::unor
 
   const RegionInfo& info = loop_to_region.at(loop.header);
   Region *region = new Region();
+  region->parent = parent;
   region->entry = loop.header;
   region->nodes = info.nodes;
   region->token = info.token;
@@ -248,23 +249,21 @@ void ConvergenceRegionManager::IdentifyConvergenceRegions(const opt::Function& f
 
   //Region fake_region;
   Region *top_level_region = new Region();
+  top_level_region->parent = nullptr;
   top_level_region->token = 0;
   top_level_region->entry = function.entry().get();
+  top_level_region->exits = function.GetReturnBlocks();
+
   for (const auto& loop : loops)
     CreateRegionHierarchy(top_level_region, loop, loop_to_region);
   for (Region *region : top_level_region->children)
     PurgeExitNodes(region);
 
-  for (const Region *child : top_level_region->children)
-    top_level_region->exits.insert(child->exits.cbegin(), child->exits.cend());
   for (const BasicBlock& block : function)
     top_level_region->nodes.insert(&block);
 
-  //std::vector<const Region*> top_level_regions(fake_region.children.begin(),
-  //                                             fake_region.children.end());
-  std::vector<const Region*> top_level_regions;
-  top_level_regions.push_back(top_level_region);
-  top_level_regions_.emplace(&function, std::move(top_level_regions));
+  assert(top_level_regions_.count(&function) == 0);
+  top_level_regions_.insert({ &function, top_level_region });
 }
 
 ConvergenceRegionManager::ConvergenceRegionManager(IRContext* context)
@@ -275,13 +274,7 @@ ConvergenceRegionManager::ConvergenceRegionManager(IRContext* context)
 
 #ifdef VERBOSE
     std::cout << "Regions:" << std::endl;
-    for (const Region* region : top_level_regions_[&function])
-      DumpRegion(region);
-
-    for (const auto& [block, token] : block_to_token_) {
-      std::cout << " - block " << block->id() << ", token=" << token << std::endl;
-    }
-    std::cout << "-- end function" << std::endl;
+    DumpRegion(top_level_regions_[&function]);
 #endif
   }
 }

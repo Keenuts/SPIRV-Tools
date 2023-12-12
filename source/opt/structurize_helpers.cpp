@@ -72,7 +72,16 @@ void FixConditionalBranch(IRContext *context, BasicBlock *block, const BasicBloc
   }
 
   InstructionBuilder builder(context, branch);
-  builder.AddConditionalBranch(condition_id, targets[0], targets[1]);
+#if 0
+  if (targets[0] == targets[1]) {
+    builder.AddBranch(targets[0]);
+  } else {
+#endif
+    builder.AddConditionalBranch(condition_id, targets[0], targets[1]);
+#if 0
+  }
+#endif
+
   context->KillInst(branch);
 }
 

@@ -37,6 +37,8 @@ class ConvergenceRegionManager {
 public:
   struct Region {
     uint32_t token;
+    const Region *parent;
+
     const BasicBlock *entry;
 
     // Blocks belonging to this region. Includes nodes in subregions.
@@ -51,16 +53,7 @@ public:
 
   ConvergenceRegionManager(IRContext* ctx);
 
-  bool HasToken(const BasicBlock* block) const {
-    return block_to_token_.count(block) != 0;
-  }
-
-  uint32_t GetToken(const BasicBlock* block) const {
-    assert(HasToken(block));
-    return block_to_token_.at(block);
-  }
-
-  const std::vector<const Region*>& GetConvergenceRegions(const opt::Function *function) const {
+  const Region* GetConvergenceRegions(const opt::Function *function) const {
     assert(top_level_regions_.count(function) == 1);
     return top_level_regions_.at(function);
   }
@@ -82,10 +75,7 @@ private:
   DominatorTree dtree_;
 
   std::vector<Region*> regions_;
-  std::unordered_map<const opt::Function*, std::vector<const Region*>> top_level_regions_;
-
-  std::unordered_map<const BasicBlock*, uint32_t> block_to_token_;
-  std::unordered_map<uint32_t, const Region*> token_to_region_;
+  std::unordered_map<const opt::Function*, const Region*> top_level_regions_;
 };
 
 }  // namespace analysis

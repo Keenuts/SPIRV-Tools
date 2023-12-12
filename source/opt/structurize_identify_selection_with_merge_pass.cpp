@@ -46,38 +46,6 @@ struct Internal {
     dtree_.InitializeTree(*context_->cfg(), &function);
   }
 
-#if 0
-  const Region* GetRegionForNode(const BasicBlock *block) {
-    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions(function_);
-
-    std::queue<const Region*> to_process;
-    for (const Region *r : regions)
-      to_process.push(r);
-
-    while (to_process.size() != 0) {
-      const Region *item = to_process.front();
-      to_process.pop();
-
-      if (item->nodes.count(block) != 0)
-        return item;
-    }
-
-    return nullptr;
-  }
-
-  const BasicBlock* GetMergeNode(const BasicBlock *block) {
-    for (const Instruction& i : *block) {
-      if (i.opcode() != spv::Op::OpSelectionMerge && i.opcode() != spv::Op::OpLoopMerge) {
-        continue;
-      }
-
-      return context_->cfg()->block(i.GetSingleWordInOperand(0));
-    }
-
-    return nullptr;
-  }
-#endif
-
   struct Task {
     BasicBlock *target;
     const BasicBlock *merge;
@@ -154,13 +122,11 @@ struct Internal {
 
   Pass::Status Process() {
     EdgeSet back_edges = context_->get_loop_mgr()->GetBackEdges(&function_);
-    const auto& regions = context_->get_convergence_region_mgr()->GetConvergenceRegions(&function_);
     auto dom_analysis = context_->GetDominatorAnalysis(&function_);
 
     std::vector<Task> tasks;
     std::queue<const Region *> to_process;
-    for (const Region *child : regions)
-      to_process.push(child);
+    to_process.push(context_->get_convergence_region_mgr()->GetConvergenceRegions(&function_));
 
     while (to_process.size() != 0) {
       const Region *item = to_process.front();
