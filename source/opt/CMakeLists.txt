@@ -127,6 +127,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   strip_convergence_operations_pass.h
   struct_cfg_analysis.h
   structurize_pass.h
+  structurize_helpers.h
   structurize_pre_headers_pass.h
   structurize_split_convergent_operation_pass.h
   structurize_merge_back_edge_pass.h
@@ -259,6 +260,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   strip_convergence_operations_pass.cpp
   struct_cfg_analysis.cpp
   structurize_pass.cpp
+  structurize_helpers.cpp
   structurize_pre_headers_pass.cpp
   structurize_split_convergent_operation_pass.cpp
   structurize_merge_back_edge_pass.cpp

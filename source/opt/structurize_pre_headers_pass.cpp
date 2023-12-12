@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "source/opt/instruction.h"
+#include "source/opt/structurize_helpers.h"
 #include "source/opt/ir_context.h"
 #include "source/opt/ir_builder.h"
 #include "source/util/string_utils.h"
@@ -99,56 +100,6 @@ struct Internal {
     return output;
   }
 
-  static bool TailIsBranch(const BasicBlock *block) {
-    return block->ctail()->opcode() == spv::Op::OpBranch;
-  }
-
-  static bool TailIsSwitch(const BasicBlock *block) {
-    return block->ctail()->opcode() == spv::Op::OpSwitch;
-  }
-
-  void FixBranch(const BasicBlock *ro_block, const BasicBlock *target) {
-    assert(ro_block->ctail()->opcode() == spv::Op::OpBranch);
-    BasicBlock *block = context_->cfg()->block(ro_block->id());
-    InstructionBuilder builder(context_, &*block->tail());
-    builder.AddBranch(target->id());
-    context_->KillInst(&*block->tail());
-  }
-
-  void FixSwitch(const BasicBlock *ro_block, const BasicBlock *old_target, const BasicBlock *target) {
-    assert(ro_block->ctail()->opcode() == spv::Op::OpSwitch);
-    BasicBlock *block = context_->cfg()->block(ro_block->id());
-    Instruction *switch_instruction = &*block->tail();
-    const uint32_t selector_id = switch_instruction->GetSingleWordInOperand(0);
-    const uint32_t default_id = switch_instruction->GetSingleWordInOperand(1);
-
-    std::vector<std::pair<Operand::OperandData, uint32_t>> targets;
-    for (uint32_t i = 2; i < switch_instruction->NumInOperands(); i += 2) {
-      const uint32_t target_id = switch_instruction->GetSingleWordInOperand(i + 1);
-      targets.push_back({ switch_instruction->GetInOperand(i).words, (target_id == old_target->id() ? target->id() : target_id ) });
-    }
-
-    InstructionBuilder builder(context_, switch_instruction);
-    builder.AddSwitch(selector_id, default_id, targets);
-    context_->KillInst(switch_instruction);
-  }
-
-  void FixConditionalBranch(const BasicBlock *ro_block, const BasicBlock *old_target, const BasicBlock *target) {
-    assert(ro_block->ctail()->opcode() == spv::Op::OpBranchConditional);
-    BasicBlock *block = context_->cfg()->block(ro_block->id());
-    Instruction *branch = &*block->tail();
-    const uint32_t condition_id = branch->GetSingleWordInOperand(0);
-    std::vector<uint32_t> targets = { branch->GetSingleWordInOperand(1), branch->GetSingleWordInOperand(2) };
-    for (size_t i = 0; i < targets.size(); i++) {
-      if (targets[i] == old_target->id())
-        targets[i] = target->id();
-    }
-
-    InstructionBuilder builder(context_, branch);
-    builder.AddConditionalBranch(condition_id, targets[0], targets[1]);
-    context_->KillInst(branch);
-  }
-
   void FixHeaders(const BlockSet& tasks) {
     struct FixData {
       BlockSet ancestors;
@@ -178,13 +129,14 @@ struct Internal {
       InstructionBuilder builder(context_, new_block);
       builder.AddBranch(item.header->id());
 
-      for (const BasicBlock *block : item.ancestors) {
+      for (const BasicBlock *ro_block : item.ancestors) {
+        BasicBlock *block = context_->cfg()->block(ro_block->id());
         if (TailIsBranch(block)) {
-          FixBranch(block, new_block);
+          FixBranch(context_, block, new_block);
         } else if (TailIsSwitch(block)) {
-          FixSwitch(block, item.header, new_block);
+          FixSwitch(context_, block, item.header, new_block);
         } else {
-          FixConditionalBranch(block, item.header, new_block);
+          FixConditionalBranch(context_, block, item.header, new_block);
         }
       }
 
