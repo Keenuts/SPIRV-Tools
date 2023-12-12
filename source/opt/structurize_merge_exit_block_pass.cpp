@@ -56,14 +56,20 @@ struct Internal {
   }
 
   struct SourceInfo {
-    const BasicBlock *source;
+    // All the blocks targeting the destination.
+    std::vector<const BasicBlock *> sources;
+
+    // The value used for the switch (result_id).
     uint32_t value_id;
+    // The value used for the switch (immediate value).
     uint32_t immediate_value;
+
+    // The destination targeted by this switch.
     const BasicBlock *destination;
   };
 
   const BasicBlock* CreateExitNode(const std::vector<SourceInfo>& info_list) {
-    assert(info_list.size() >= 2);
+    assert(info_list.size() > 0);
     BasicBlock *new_block = nullptr;
     {
       const uint32_t new_block_id = context_->TakeNextId();
@@ -73,21 +79,29 @@ struct Internal {
       function_.AddBasicBlock(std::move(bb));
     }
 
+    if (info_list.size() == 1) {
+      InstructionBuilder builder(context_, new_block);
+      builder.AddBranch(info_list[0].destination->id());
+      return new_block;
+    }
+
     std::vector<std::pair<Operand::OperandData, uint32_t>> targets;
     std::vector<uint32_t> phi_operands;
     bool first = true;
     for (const auto& info : info_list) {
-      BasicBlock *block = context_->cfg()->block(info.source->id());
-      if (TailIsBranch(info.source)) {
-        FixBranch(context_, block, new_block);
-      } else if (TailIsSwitch(info.source)) {
-        FixSwitch(context_, block, info.destination, new_block);
-      } else {
-        FixConditionalBranch(context_, block, info.destination, new_block);
-      }
+      for (const BasicBlock *src : info.sources) {
+        BasicBlock *block = context_->cfg()->block(src->id());
+        if (TailIsBranch(block)) {
+          FixBranch(context_, block, new_block);
+        } else if (TailIsSwitch(block)) {
+          FixSwitch(context_, block, info.destination, new_block);
+        } else {
+          FixConditionalBranch(context_, block, info.destination, new_block);
+        }
 
-      phi_operands.push_back(info.value_id);
-      phi_operands.push_back(info.source->id());
+        phi_operands.push_back(info.value_id);
+        phi_operands.push_back(src->id());
+      }
 
       if (first) {
         first = false;
@@ -116,29 +130,48 @@ struct Internal {
     const uint32_t type_id = type_mgr->GetTypeInstruction(&temp);
     analysis::Integer* int_type = type_mgr->GetType(type_id)->AsInteger();
 
-
     std::vector sorted_exits(exits.cbegin(), exits.cend());
-    // This sort is only to help write tests. Operands order comes from a hashmap which order depends
-    // on the pointer addresses. This means each new run might re-order operands. This makes writing
-    // CHECK tests a bit hard. Ordering them using something we can easily predict.
     std::sort(sorted_exits.begin(), sorted_exits.end(), [](const auto& lhs, const auto& rhs) {
       return lhs.first->id() < rhs.first->id();
     });
 
-
-    std::vector<SourceInfo> infos;
+    std::unordered_map<const BasicBlock*, SourceInfo> unsorted_targets;
     uint32_t index = 0;
     for (const auto& [src, dst] : sorted_exits) {
-      SourceInfo info;
-      info.source = src;
-      info.destination = dst;
-      info.immediate_value = index;
-      info.value_id = const_mgr->GetDefiningInstruction(const_mgr->GetConstant(int_type, { index }))->result_id();
-      infos.emplace_back(std::move(info));
-      ++index;
+      if (unsorted_targets.count(dst) == 0) {
+        SourceInfo info;
+        info.destination = dst;
+        info.immediate_value = index;
+        info.value_id = const_mgr->GetDefiningInstruction(const_mgr->GetConstant(int_type, { index }))->result_id();
+        unsorted_targets.emplace(dst, std::move(info));
+        index++;
+      }
+
+      const auto& sources = unsorted_targets[dst].sources;
+      auto it = std::find(sources.cbegin(), sources.cend(), src);
+      if (it != sources.cend())
+        continue;
+
+      unsorted_targets[dst].sources.push_back(src);
     }
 
-    return CreateExitNode(infos);
+    std::vector<SourceInfo> sorted_targets;
+    for (const auto& [key, value] : unsorted_targets) {
+      sorted_targets.push_back(value);
+    }
+    // This sort is only to help write tests. Operands order comes from a hashmap which order depends
+    // on the pointer addresses. This means each new run might re-order operands. This makes writing
+    // CHECK tests a bit hard. Ordering them using something we can easily predict.
+    std::sort(sorted_targets.begin(), sorted_targets.end(), [](const auto& lhs, const auto& rhs) {
+      return lhs.immediate_value < rhs.immediate_value;
+    });
+    for (auto& info : sorted_targets) {
+      std::sort(info.sources.begin(), info.sources.end(), [](const auto& lhs, const auto& rhs) {
+          return lhs->id() < rhs->id();
+      });
+    }
+
+    return CreateExitNode(sorted_targets);
   }
 
   void FixPhiNodes(BasicBlock *subject, const BasicBlock *old_src, const BasicBlock *new_src) {

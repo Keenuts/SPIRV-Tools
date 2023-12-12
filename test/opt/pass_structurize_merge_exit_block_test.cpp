@@ -306,6 +306,69 @@ TEST_F(StructurizeMergeExitBlockPassTest, NestedRegionEarlyExit) {
   EXPECT_EQ(std::get<1>(result), Pass::Status::SuccessWithChange);
 }
 
+// When If multiple exits lead to the same block, we could end-up generating a switch for which multiple cases
+// have the same target. This should be simplified.
+TEST_F(StructurizeMergeExitBlockPassTest, NestedRegionEarlyExitSimplifySwitch) {
+  const std::string text =
+      R"(
+                                OpCapability Shader
+                                OpMemoryModel Logical GLSL450
+                                OpEntryPoint GLCompute %1 "main"
+                                OpExecutionMode %1 LocalSize 1 1 1
+                        %void = OpTypeVoid
+                           %3 = OpTypeFunction %void
+                        %bool = OpTypeBool
+                       %false = OpConstantFalse %bool
+                        %uint = OpTypeInt 32 0
+                      %uint_0 = OpConstant %uint 0
+                      %uint_1 = OpConstant %uint 1
+                           %1 = OpFunction %void None %3
+                           %9 = OpLabel
+                          %10 = OpConvergenceEntry
+                                OpBranchConditional %false %20 %11
+                          %20 = OpLabel
+                          %12 = OpConvergenceLoop
+                                OpBranchConditional %false %30 %21
+                          %30 = OpLabel
+                                OpBranchConditional %false %31 %11
+                          %31 = OpLabel
+                                OpBranchConditional %false %20 %11
+                          %21 = OpLabel
+                                OpBranch %9
+                          %11 = OpLabel
+                                OpReturn
+
+; CHECK-DAG:               %9 = OpLabel
+; CHECK-NEXT:             %10 = OpConvergenceEntry
+; CHECK-NEXT:                   OpBranchConditional %false %20 %11
+
+; CHECK-DAG:              %20 = OpLabel
+; CHECK-NEXT:             %12 = OpConvergenceLoop
+; CHECK-NEXT:                   OpBranchConditional %false %30 [[exit_0:%[0-9]+]]
+
+; CHECK-DAG:              %30 = OpLabel
+; CHECK-NEXT:                   OpBranchConditional %false %31 [[exit_0]]
+
+; CHECK-DAG:              %31 = OpLabel
+; CHECK-NEXT:                   OpBranchConditional %false %20 [[exit_0]]
+
+; CHECK-DAG:       [[exit_0]] = OpLabel
+; CHECK-NEXT: [[tmp:%[0-9]+]] = OpPhi %uint %uint_0 %20 %uint_1 %30 %uint_1 %31
+; CHECK-NEXT:                   OpSwitch [[tmp]] %21 1 %11
+
+; CHECK-DAG:              %11 = OpLabel
+; CHECK-NEXT:                   OpReturn
+
+; CHECK-DAG:              %21 = OpLabel
+; CHECK-NEXT:                   OpBranch %9
+
+  )";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  auto result = SinglePassRunAndMatch<StructurizeMergeExitBlockPass>(text, /* do_validation= */ false);
+  EXPECT_EQ(std::get<1>(result), Pass::Status::SuccessWithChange);
+}
+
 }  // namespace
 }  // namespace opt
 }  // namespace spvtools
