@@ -250,6 +250,7 @@ Optimizer::PassToken CreateNullPass();
 Optimizer::PassToken CreateStripDebugInfoPass();
 
 Optimizer::PassToken CreateStripHeadersPass();
+Optimizer::PassToken CreateStripConvergenceOperationsPass();
 
 Optimizer::PassToken CreateStructurizePass();
 

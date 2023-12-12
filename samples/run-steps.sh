@@ -59,5 +59,9 @@ echo 'Running structurize-identify-selection-without-merge.'
 spirv-opt /tmp/step_6 -o /tmp/step_7 --structurize-identify-selection-without-merge --skip-validation
 spirv-cfg /tmp/step_7 -o - | dot -Tpng > /tmp/step_7.png
 
+echo 'Running strip-convergence-operations.'
+spirv-opt /tmp/step_7 -o /tmp/step_8 --strip-convergence-operations --skip-validation
+spirv-cfg /tmp/step_8 -o - | dot -Tpng > /tmp/step_8.png
+
 echo "done, writting output to $OUTPUT"
-cp /tmp/step_7 "$OUTPUT"
+cp /tmp/step_8 "$OUTPUT"

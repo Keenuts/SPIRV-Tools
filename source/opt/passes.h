@@ -84,6 +84,7 @@
 #include "source/opt/strip_debug_info_pass.h"
 #include "source/opt/strip_nonsemantic_info_pass.h"
 #include "source/opt/strip_headers_pass.h"
+#include "source/opt/strip_convergence_operations_pass.h"
 #include "source/opt/structurize_pass.h"
 #include "source/opt/structurize_pre_headers_pass.h"
 #include "source/opt/structurize_split_convergent_operation_pass.h"

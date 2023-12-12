@@ -124,6 +124,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   strip_debug_info_pass.h
   strip_nonsemantic_info_pass.h
   strip_headers_pass.h
+  strip_convergence_operations_pass.h
   struct_cfg_analysis.h
   structurize_pass.h
   structurize_pre_headers_pass.h
@@ -255,6 +256,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   strip_debug_info_pass.cpp
   strip_nonsemantic_info_pass.cpp
   strip_headers_pass.cpp
+  strip_convergence_operations_pass.cpp
   struct_cfg_analysis.cpp
   structurize_pass.cpp
   structurize_pre_headers_pass.cpp

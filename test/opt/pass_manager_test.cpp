@@ -83,6 +83,15 @@ TEST(PassManager, InterfaceHeaders) {
   EXPECT_STREQ("strip-headers", manager.GetPass(0)->name());
 }
 
+TEST(PassManager, InterfaceStripConvergenceOperation) {
+  PassManager manager;
+  EXPECT_EQ(0u, manager.NumPasses());
+
+  manager.AddPass<StripConvergenceOperationsPass>();
+  EXPECT_EQ(1u, manager.NumPasses());
+  EXPECT_STREQ("strip-convergence-operations", manager.GetPass(0)->name());
+}
+
 TEST(PassManager, InterfaceStructurize) {
   PassManager manager;
   EXPECT_EQ(0u, manager.NumPasses());

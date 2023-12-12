@@ -301,6 +301,8 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateStripDebugInfoPass());
   } else if (pass_name == "strip-headers") {
     RegisterPass(CreateStripHeadersPass());
+  } else if (pass_name == "strip-convergence-operations") {
+    RegisterPass(CreateStripConvergenceOperationsPass());
   } else if (pass_name == "structurize") {
     RegisterPass(CreateStructurizePass());
   } else if (pass_name == "structurize-pre-headers") {
@@ -742,6 +744,11 @@ Optimizer::PassToken CreateStripNonSemanticInfoPass() {
 Optimizer::PassToken CreateStripHeadersPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::StripHeadersPass>());
+}
+
+Optimizer::PassToken CreateStripConvergenceOperationsPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::StripConvergenceOperationsPass>());
 }
 
 Optimizer::PassToken CreateStructurizePass() {
